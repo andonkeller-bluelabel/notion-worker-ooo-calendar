@@ -154,7 +154,10 @@ export function toOooRequest(page: NotionPage, disambiguate: readonly string[] =
   const rawTitle = readString(page, Ooo.TITLE);
   // The worker writes the title back, so strip its own marker before using the
   // title as a name fallback — otherwise each pass would append another one.
-  const title = rawTitle ? rawTitle.replace(new RegExp(`\\s*${AWAY_MARKER}\\s*$`), "").trim() || null : null;
+  // Strip at either end: the marker leads today and trailed in earlier rows.
+  const title = rawTitle
+    ? rawTitle.replace(new RegExp(`^\\s*${AWAY_MARKER}\\s*|\\s*${AWAY_MARKER}\\s*$`, "g"), "").trim() || null
+    : null;
 
   const personName = notionName ?? (email ? nameFromEmail(email) : null) ?? title ?? "Team member";
 
@@ -203,7 +206,7 @@ export function blockedReason(request: OooRequest): string | null {
   return null;
 }
 
-/** Calendar subject, e.g. "Andon ✈️". */
+/** Calendar subject, e.g. "✈️ Andon". */
 export function eventSubject(request: OooRequest): string {
-  return `${request.calendarName} ${AWAY_MARKER}`;
+  return `${AWAY_MARKER} ${request.calendarName}`;
 }

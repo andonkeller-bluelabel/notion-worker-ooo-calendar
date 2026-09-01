@@ -21,7 +21,7 @@ function request(over: Partial<OooRequest> = {}): OooRequest {
     status: "Requested",
     eventId: null,
     notifiedStatus: null,
-    currentTitle: "Danny ✈️",
+    currentTitle: "✈️ Danny",
     hasIdentity: true,
     inTrash: false,
     ...over,

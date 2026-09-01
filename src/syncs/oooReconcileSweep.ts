@@ -71,17 +71,41 @@ export const sweepAnchorDb = worker.database("oooSweepAnchor", {
 });
 
 /**
- * Rows worth reconciling: anything Approved (should have an event) plus
- * anything still carrying an event id (may need one removed). A Requested row
- * with no event id reconciles to a no-op, so there's no reason to fetch it.
+ * Rows worth reconciling: anything Approved (should have an event) or still
+ * carrying an event id (may need one removed) — AND within the calendar window
+ * this sweep actually polices. A Requested row with no event id reconciles to a
+ * no-op, so there is no reason to fetch it.
+ *
+ * The date bound matters at scale. Without it the sweep re-PATCHed every
+ * approved event on every run; once a year of history was imported that was 171
+ * Graph writes per run, took ~4.5 minutes, and hit the platform's execution
+ * timeout mid-pass. Past time off is immutable, so policing it every ten
+ * minutes buys nothing. Rows with no dates are always included: those are the
+ * approved-but-unfilled ones a human still needs to fix.
+ *
+ * An edit to a row older than the window is still picked up — the webhook fires
+ * on `Dates` and `Status` changes regardless of how old the row is. The sweep is
+ * the safety net for current and upcoming time off, not an audit of the archive.
  */
-const SWEEP_FILTER = {
-  or: [
-    // `Status` is a status-type property, so the filter key is `status`, not `select`.
-    { property: Ooo.STATUS, status: { equals: ApprovalStatus.APPROVED } },
-    { property: Ooo.O365_EVENT_ID, rich_text: { is_not_empty: true } },
-  ],
-};
+function sweepFilter(windowStartDate: string) {
+  return {
+    and: [
+      {
+        or: [
+          // `Status` is a status-type property, so the key is `status`, not `select`.
+          { property: Ooo.STATUS, status: { equals: ApprovalStatus.APPROVED } },
+          { property: Ooo.O365_EVENT_ID, rich_text: { is_not_empty: true } },
+        ],
+      },
+      {
+        or: [
+          { property: Ooo.DATES, date: { on_or_after: windowStartDate } },
+          { property: Ooo.DATES, date: { is_empty: true } },
+        ],
+      },
+    ],
+  };
+}
 
 interface SweepTally {
   reconciled: number;
@@ -93,8 +117,13 @@ interface SweepTally {
 async function runSweep(notion: Notion): Promise<SweepTally> {
   const tally: SweepTally = { reconciled: 0, failed: 0, orphansRemoved: 0, duplicatesRemoved: 0 };
 
+  // Window shared by both passes, so pass 1 never reconciles a row whose event
+  // pass 2 cannot see.
+  const today = new Date().toISOString().slice(0, 10);
+  const windowStartDate = addDays(today, -sweepLookbackDays());
+
   // --- pass 1: forward reconcile ---
-  const rows = await queryAll(notion, oooDataSourceId(), SWEEP_FILTER);
+  const rows = await queryAll(notion, oooDataSourceId(), sweepFilter(windowStartDate));
   console.log(`[${TAG}] ${rows.length} row(s) to reconcile`);
 
   /** Event ids that a live, approved row legitimately owns after this pass. */
@@ -130,8 +159,7 @@ async function runSweep(notion: Notion): Promise<SweepTally> {
   }
 
   // --- pass 2: orphaned calendar events ---
-  const today = new Date().toISOString().slice(0, 10);
-  const windowStart = `${addDays(today, -sweepLookbackDays())}T00:00:00`;
+  const windowStart = `${windowStartDate}T00:00:00`;
   const windowEnd = `${addDays(today, sweepLookaheadDays())}T00:00:00`;
 
   const events = await listWorkerEvents(windowStart, windowEnd);

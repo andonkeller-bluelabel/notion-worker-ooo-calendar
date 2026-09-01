@@ -67,7 +67,8 @@ export const ApprovalStatus = {
 } as const;
 
 /**
- * Appended to the first name on every calendar event, e.g. "Andon ✈️".
- * The plane is the house shorthand for "away".
+ * Prefixed to the first name on every calendar event, e.g. "✈️ Andon".
+ * The plane is the house shorthand for "away"; leading it makes a column of
+ * entries scan as a list of icons rather than a ragged right edge.
  */
 export const AWAY_MARKER = "✈️";

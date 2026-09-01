@@ -51,7 +51,7 @@ test("the all-day range ends the day after the last day off", () => {
 });
 
 test("the subject is a first name plus the away marker", () => {
-  assert.equal((buildEventPayload(request()) as Record<string, any>).subject, "Andon ✈️");
+  assert.equal((buildEventPayload(request()) as Record<string, any>).subject, "✈️ Andon");
 });
 
 test("Notes NEVER reach the event body — the calendar is readable org-wide", () => {

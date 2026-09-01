@@ -34,7 +34,7 @@ One idempotent function, run on every delivery regardless of which property chan
 branch on transitions; it makes the calendar match whatever the row currently says. That is what
 makes replays, out-of-order deliveries, and the sweep all safe against the same row.
 
-Events are titled `<first name> ✈️` (the plane is the house shorthand for "away"), and are
+Events are titled `✈️ <first name>` (the plane is the house shorthand for "away"), and are
 `isAllDay: true`, `showAs: "free"`, **no attendees** (the shared calendar is already the audience;
 an attendee would get mailed an invite and a copy on their personal calendar), and
 `isReminderOn: false`.
@@ -105,7 +105,7 @@ property. The worker reads every column and writes exactly one.
 | **O365 Event ID** | rich_text, hidden | **read + write — worker-owned** |
 | **Notified Status** | rich_text, hidden | **read + write — worker-owned** |
 
-The worker rewrites `Title` to match the calendar subject (`<name> ✈️`) on every reconcile, whatever
+The worker rewrites `Title` to match the calendar subject (`✈️ <name>`) on every reconcile, whatever
 the status, so the two views never disagree. It skips the write when the title already matches, when
 the page is trashed, and when no identity resolved — in that last case the name is derived FROM the
 title, and writing a computed one back would append a marker on every pass. The away marker is also
@@ -146,7 +146,7 @@ That is why `Notes` is read but never written to the event: it is free text on a
 reasons people put in it belong in Notion, where approvers see them, not on a company-wide calendar.
 
 There is deliberately **no Type column**. Putting "Sick" or "Personal" in a subject line broadcasts
-it to everyone with calendar access, so every event reads `<first name> ✈️` and nothing more. To
+it to everyone with calendar access, so every event reads `✈️ <first name>` and nothing more. To
 reintroduce the distinction, add a `Type` select, read it in `toOooRequest`, and use it in
 `eventSubject` (see `AWAY_MARKER` in `src/lib/schema.ts`).
 

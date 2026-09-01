@@ -93,22 +93,24 @@ test("reads a complete approved row", () => {
   assert.equal(request.status, "Approved");
   assert.equal(request.eventId, null);
   assert.ok(isApproved(request));
-  assert.equal(eventSubject(request), "Andon ✈️");
+  assert.equal(eventSubject(request), "✈️ Andon");
 });
 
 test("the away marker is stripped from the title before it is used as a name fallback", () => {
   // The worker writes "<name> ✈️" back into Title. Without stripping, a row
   // with no identity would gain another marker on every pass.
-  const noIdentity = { ...APPROVED_ROW, "Your Email": email(null), BlueLabeler: bluelabeler(null), Title: title("Andon ✈️") };
-  const request = toOooRequest(page(noIdentity));
-  assert.equal(request.calendarName, "Andon");
-  assert.equal(request.hasIdentity, false);
+  for (const raw of ["✈️ Andon", "Andon ✈️"]) {
+    const noIdentity = { ...APPROVED_ROW, "Your Email": email(null), BlueLabeler: bluelabeler(null), Title: title(raw) };
+    const request = toOooRequest(page(noIdentity));
+    assert.equal(request.calendarName, "Andon", `raw=${raw}`);
+    assert.equal(request.hasIdentity, false);
+  }
 });
 
 test("BlueLabeler supplies the name when set, and is title-cased", () => {
   const withPicker = toOooRequest(page({ ...APPROVED_ROW, BlueLabeler: bluelabeler("Danny") }));
   assert.equal(withPicker.calendarName, "Danny");
-  assert.equal(eventSubject(withPicker), "Danny ✈️");
+  assert.equal(eventSubject(withPicker), "✈️ Danny");
   // A lowercase Notion profile name would otherwise read as a bug on the calendar.
   assert.equal(toOooRequest(page({ ...APPROVED_ROW, BlueLabeler: bluelabeler("parvathy") })).calendarName, "Parvathy");
 });
@@ -151,7 +153,7 @@ test("reads both ends of the Dates range", () => {
 test("the subject never names a reason — OOO Entries has no Type, deliberately", () => {
   // Adding "Sick" or "Personal" to a subject broadcasts it to everyone with
   // access to the shared calendar. See AWAY_MARKER in schema.ts.
-  assert.equal(eventSubject(toOooRequest(page(APPROVED_ROW))), "Andon ✈️");
+  assert.equal(eventSubject(toOooRequest(page(APPROVED_ROW))), "✈️ Andon");
 });
 
 test("the calendar shows a first name only, derived from the email", () => {

@@ -73,7 +73,7 @@ function request(over: Partial<OooRequest> = {}): OooRequest {
     pageUrl: "https://notion.so/page1",
     personName: "Andon Keller",
     calendarName: "Andon",
-    currentTitle: "Andon ✈️",
+    currentTitle: "✈️ Andon",
     notifiedStatus: "Approved",
     hasIdentity: true,
     personEmail: "andon.keller@bluelabellabs.com",
@@ -212,7 +212,7 @@ test("KNOWN GAP: clearing O365 Event ID by hand while Approved creates a duplica
 test("a stale title is rewritten to match the calendar subject", async () => {
   const h = harness();
   await reconcile(request({ currentTitle: "New submission" }), h.deps);
-  assert.deepEqual(h.titles, [{ pageId: "page-1", title: "Andon ✈️" }]);
+  assert.deepEqual(h.titles, [{ pageId: "page-1", title: "✈️ Andon" }]);
 });
 
 test("a title that already matches is left alone — an unchanged sweep writes nothing", async () => {
@@ -225,7 +225,7 @@ test("the title is kept in step whatever the status, not just when approved", as
   for (const status of ["Requested", "Denied", "Pending"]) {
     const h = harness();
     await reconcile(request({ status, currentTitle: "whatever" }), h.deps);
-    assert.deepEqual(h.titles, [{ pageId: "page-1", title: "Andon ✈️" }], `status=${status}`);
+    assert.deepEqual(h.titles, [{ pageId: "page-1", title: "✈️ Andon" }], `status=${status}`);
   }
 });
 
