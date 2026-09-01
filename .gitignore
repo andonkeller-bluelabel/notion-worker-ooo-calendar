@@ -1,0 +1,16 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Secrets — Microsoft Graph client secret / Notion token, pulled via `ntn workers env pull`. NEVER commit.
+.env
+.env.local
+
+# Logs / misc
+*.log
+.DS_Store
+
+# Claude Code personal settings
+.claude/settings.local.json
