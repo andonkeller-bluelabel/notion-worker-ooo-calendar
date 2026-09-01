@@ -106,7 +106,6 @@ async function findUserIdByEmail(notion: Notion, email: string): Promise<string 
 export async function fillIdentity(notion: Notion, page: NotionPage): Promise<NotionPage> {
   const creator = readCreatedBy(page, Ooo.CREATED_BY);
   const inputs: IdentityInputs = {
-    source: readString(page, Ooo.SOURCE),
     hasBlueLabeler: readPeople(page, Ooo.BLUELABELER).length > 0,
     email: readString(page, Ooo.EMAIL),
     createdBy: creator,

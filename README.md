@@ -104,7 +104,6 @@ property. The worker reads every column and writes exactly one.
 | Notes | rich_text, optional | read (stays in Notion — never written to the calendar) |
 | **O365 Event ID** | rich_text, hidden | **read + write — worker-owned** |
 | **Notified Status** | rich_text, hidden | **read + write — worker-owned** |
-| Source | select — Core, Flex | read (hidden; each form defaults it) |
 | Created by | created_by | read (carries a verified email) |
 
 The worker rewrites `Title` to match the calendar subject (`✈️ <name>`) on every reconcile, whatever
@@ -118,24 +117,24 @@ writes all three, so a trigger on any of them would feed deliveries back to itse
 
 ## Who a request belongs to
 
-Two forms feed this database and they establish identity differently, so the
-worker fills `BlueLabeler` and `Your Email` from whichever signal that form can
-be trusted on:
+Two forms feed this database, and they differ structurally: the **Flex
+Request** requires an email because the responder may be anonymous, while the
+**Core Request** asks for none because the responder is signed in. That
+difference is the discriminator, so no marker property is needed:
 
-- **Core Request** — the responder is signed in, so `Created by` is
-  authoritative. The *property* (not the page-level field) comes back expanded
-  with a verified email, so no user lookup is needed.
-- **Flex Request** — the responder may be anonymous, so `Created by` is
-  **never** trusted: it would attribute someone's leave to whoever Notion
-  recorded as the creator of an anonymous submission. The typed email is the
-  identity, and BlueLabeler is set only when that address exactly matches a
-  Notion account.
+| Row | Identity |
+|---|---|
+| `Your Email` filled | The typed address. `Created by` is **ignored**. BlueLabeler is set only on an exact match against a Notion account. |
+| `Your Email` blank | `Created by` — which, read as a *property* rather than the page-level field, comes back expanded with a verified email, so no user lookup is needed. |
 
-`Source` is what tells them apart, defaulted per form and hidden from
-responders. Inferring instead from whether an email was typed breaks the moment
-someone fills the wrong field; inferring from `Created by` assumes something
-about anonymous submissions that isn't guaranteed. A row with no `Source` is
-treated as Flex, which is the conservative reading.
+Ignoring `Created by` whenever an email exists is the load-bearing part. Notion
+does not guarantee what it records as the creator of an anonymous form
+submission (a guest, the form's owner, an integration), and trusting it there
+would file a contractor's leave under whoever that is, then put their name on a
+calendar the whole company reads. Native Notion forms have no hidden or
+prefilled fields to mark the source with, so this structural signal is what
+there is — and it degrades safely: a Core submitter who does type an address
+types their own, so the attribution stays correct.
 
 The worker only ever fills a blank. A value a human set — filing on a
 colleague's behalf, or correcting a bad attribution — is never overwritten, so

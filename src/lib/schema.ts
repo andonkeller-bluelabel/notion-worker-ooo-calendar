@@ -48,14 +48,6 @@ export const Ooo = {
    * changes nothing on the calendar and would leave no other trace.
    */
   NOTIFIED_STATUS: "Notified Status",
-  /**
-   * select — which form produced the row. Set as a hidden default by each
-   * form, not by a person. It is the only reliable way to tell a logged-in
-   * submission from an anonymous one: inferring from whether an email was
-   * typed breaks the moment someone fills the wrong field, and inferring from
-   * `Created by` depends on whatever Notion records for an anonymous form.
-   */
-  SOURCE: "Source",
   /** created_by — the Notion user who submitted. Carries a verified email. */
   CREATED_BY: "Created by",
 } as const;
