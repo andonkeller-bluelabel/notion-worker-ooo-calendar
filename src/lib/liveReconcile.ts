@@ -18,7 +18,7 @@ import {
   type Notion,
   type NotionPage,
 } from "./notion.js";
-import { identityFill, needsEmailLookup, type IdentityInputs } from "./identity.js";
+import { filledName, identityFill, needsEmailLookup, type IdentityInputs } from "./identity.js";
 import { toOooRequest, type OooRequest } from "./oooRequest.js";
 import { reconcile, type ReconcileDeps, type ReconcileResult } from "./reconcile.js";
 import { createEvent, deleteEvent, updateEvent } from "./graphCalendar.js";
@@ -59,27 +59,27 @@ export function liveDeps(notion: Notion, options: LiveOptions = {}): ReconcileDe
  * is cached for a few minutes. `needsEmailLookup` keeps this off the hot path:
  * only an unattributed row with an address to match on gets this far.
  */
-let userCache: { at: number; byEmail: Map<string, string> } | null = null;
+let userCache: { at: number; byEmail: Map<string, { id: string; name: string | null }> } | null = null;
 const USER_CACHE_MS = 5 * 60 * 1000;
 
-async function findUserIdByEmail(notion: Notion, email: string): Promise<string | null> {
+async function findUserByEmail(notion: Notion, email: string): Promise<{ id: string; name: string | null } | null> {
   const key = email.trim().toLowerCase();
   if (!key) return null;
   if (!userCache || Date.now() - userCache.at > USER_CACHE_MS) {
-    const byEmail = new Map<string, string>();
+    const byEmail = new Map<string, { id: string; name: string | null }>();
     try {
       let cursor: string | undefined;
       do {
         const res = (await notion.users.list({ start_cursor: cursor, page_size: 100 } as Parameters<
           Notion["users"]["list"]
         >[0])) as {
-          results: Array<{ id?: string; type?: string; person?: { email?: string } }>;
+          results: Array<{ id?: string; name?: string; type?: string; person?: { email?: string } }>;
           has_more?: boolean;
           next_cursor?: string | null;
         };
         for (const u of res.results ?? []) {
           const addr = u?.type === "person" ? u.person?.email : undefined;
-          if (u?.id && addr) byEmail.set(addr.toLowerCase(), u.id);
+          if (u?.id && addr) byEmail.set(addr.toLowerCase(), { id: u.id, name: u.name ?? null });
         }
         cursor = res.has_more ? (res.next_cursor ?? undefined) : undefined;
       } while (cursor);
@@ -111,8 +111,8 @@ export async function fillIdentity(notion: Notion, page: NotionPage): Promise<No
     createdBy: creator,
   };
 
-  const matched = needsEmailLookup(inputs) ? await findUserIdByEmail(notion, inputs.email!) : null;
-  const fill = identityFill(inputs, matched);
+  const matched = needsEmailLookup(inputs) ? await findUserByEmail(notion, inputs.email!) : null;
+  const fill = identityFill(inputs, matched?.id ?? null);
   if (!fill.blueLabelerId && !fill.email) return page;
   if (page.inTrash || isDryRun()) return page;
 
@@ -127,12 +127,26 @@ export async function fillIdentity(notion: Notion, page: NotionPage): Promise<No
   }
 
   // Patch locally so the caller sees post-fill values without re-fetching.
+  //
+  // The NAME matters: it becomes the calendar subject. Take it from whoever we
+  // actually filled from — the matched user on the email path, the creator on
+  // the Created-by path. Using the creator's name on the email path put
+  // "✈️ Anonymous" on a row whose BlueLabeler was correctly resolved to a real
+  // person, because an anonymous form submission's creator is a sentinel user
+  // literally named "Anonymous".
   const properties = { ...page.properties };
   if (fill.email) properties[Ooo.EMAIL] = { type: "email", email: fill.email };
   if (fill.blueLabelerId) {
     properties[Ooo.BLUELABELER] = {
       type: "people",
-      people: [{ object: "user", id: fill.blueLabelerId, name: creator?.name ?? null, person: { email: fill.email ?? null } }],
+      people: [
+        {
+          object: "user",
+          id: fill.blueLabelerId,
+          name: filledName(fill.blueLabelerId, matched, creator),
+          person: { email: fill.email ?? inputs.email ?? null },
+        },
+      ],
     };
   }
   console.log(`[identity] filled ${page.id}: ${Object.keys(props).join(", ")}`);

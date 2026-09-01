@@ -74,3 +74,26 @@ export function identityFill(inputs: IdentityInputs, matchedUserId: string | nul
 export function needsEmailLookup(inputs: IdentityInputs): boolean {
   return !inputs.hasBlueLabeler && Boolean(inputs.email);
 }
+
+/**
+ * The display name to attach to a BlueLabeler we just filled in, or null.
+ *
+ * Only the source we ACTUALLY filled from may supply the name, and it becomes
+ * the calendar subject, so a wrong one is visible company-wide. Getting this
+ * backwards once put "✈️ Anonymous" on a row whose BlueLabeler had been
+ * correctly resolved to a real person: an anonymous form submission's creator
+ * is a sentinel user literally named "Anonymous", and it was being read on the
+ * email-match path where it has no bearing.
+ *
+ * Null is safe — the name then derives from the email address instead.
+ */
+export function filledName(
+  blueLabelerId: string | undefined,
+  matched: { id: string; name: string | null } | null,
+  creator: CreatedBy | null,
+): string | null {
+  if (!blueLabelerId) return null;
+  if (matched?.id === blueLabelerId) return matched.name;
+  if (creator?.isPerson && creator.id === blueLabelerId) return creator.name;
+  return null;
+}

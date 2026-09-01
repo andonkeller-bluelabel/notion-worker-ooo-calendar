@@ -9,7 +9,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { identityFill, needsEmailLookup, type IdentityInputs } from "./identity.js";
+import { filledName, identityFill, needsEmailLookup, type IdentityInputs } from "./identity.js";
 
 const PERSON = { id: "u-andon", name: "Andon", email: "andon.keller@bluelabellabs.com", isPerson: true };
 const BOT = { id: "u-bot", name: "Notion MCP", email: null, isPerson: false };
@@ -73,4 +73,29 @@ test("the user lookup runs only when it could change something", () => {
   assert.equal(needsEmailLookup(inputs({ email: "a@b.com" })), true);
   assert.equal(needsEmailLookup(inputs({ email: "a@b.com", hasBlueLabeler: true })), false);
   assert.equal(needsEmailLookup(inputs({ email: null })), false);
+});
+
+// --- whose name ends up on the calendar ---
+
+const ANON = { id: "notion_user-00000000-0000-0000-0000-00000000000a", name: "Anonymous", email: null, isPerson: false };
+
+test("the name comes from the matched user, NOT the anonymous creator", () => {
+  // The regression: an anonymous submission's creator is a sentinel user named
+  // "Anonymous", and reading it here put "✈️ Anonymous" on the calendar for a
+  // row whose BlueLabeler had resolved correctly to a real person.
+  assert.equal(filledName("u-andon", { id: "u-andon", name: "Andon" }, ANON), "Andon");
+});
+
+test("the name comes from the creator on the Created-by path", () => {
+  assert.equal(filledName("u-andon", null, PERSON), "Andon");
+});
+
+test("a name is never borrowed from someone we did not fill from", () => {
+  assert.equal(filledName("u-andon", { id: "u-someone-else", name: "Wrong" }, null), null);
+  assert.equal(filledName("u-andon", null, { ...PERSON, id: "u-different" }), null);
+  assert.equal(filledName(undefined, { id: "u-andon", name: "Andon" }, PERSON), null);
+});
+
+test("a bot never supplies a name", () => {
+  assert.equal(filledName("u-bot", null, BOT), null);
 });
