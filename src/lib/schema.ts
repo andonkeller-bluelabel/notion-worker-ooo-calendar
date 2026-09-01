@@ -48,6 +48,16 @@ export const Ooo = {
    * changes nothing on the calendar and would leave no other trace.
    */
   NOTIFIED_STATUS: "Notified Status",
+  /**
+   * select — which form produced the row. Set as a hidden default by each
+   * form, not by a person. It is the only reliable way to tell a logged-in
+   * submission from an anonymous one: inferring from whether an email was
+   * typed breaks the moment someone fills the wrong field, and inferring from
+   * `Created by` depends on whatever Notion records for an anonymous form.
+   */
+  SOURCE: "Source",
+  /** created_by — the Notion user who submitted. Carries a verified email. */
+  CREATED_BY: "Created by",
 } as const;
 
 /**
@@ -72,3 +82,16 @@ export const ApprovalStatus = {
  * entries scan as a list of icons rather than a ragged right edge.
  */
 export const AWAY_MARKER = "✈️";
+
+/**
+ * `Source` option names, one per form.
+ *
+ * CORE: the responder is signed in, so `Created by` identifies them.
+ * FLEX: the responder may be anonymous, so the typed email is the identity and
+ * `Created by` must NOT be trusted — it would attribute the request to whoever
+ * or whatever Notion records as the creator of an anonymous submission.
+ */
+export const SourceForm = {
+  CORE: "Core",
+  FLEX: "Flex",
+} as const;

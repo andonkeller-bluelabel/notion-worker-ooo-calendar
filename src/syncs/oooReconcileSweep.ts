@@ -31,7 +31,7 @@ import { worker } from "../worker.js";
 import { Ooo, ApprovalStatus } from "../lib/schema.js";
 import { pageUrl, queryAll, retrievePage, type Notion } from "../lib/notion.js";
 import { toOooRequest, addDays, isApproved } from "../lib/oooRequest.js";
-import { reconcileRequest } from "../lib/liveReconcile.js";
+import { fillIdentity, reconcileRequest } from "../lib/liveReconcile.js";
 import { deleteEvent, listWorkerEvents } from "../lib/graphCalendar.js";
 import { isNotFound } from "../lib/errors.js";
 import { disambiguateFirstNames, isDryRun, oooDataSourceId, sweepLookaheadDays, sweepLookbackDays } from "../lib/env.js";
@@ -130,7 +130,8 @@ async function runSweep(notion: Notion): Promise<SweepTally> {
   const liveEventIds = new Set<string>();
 
   for (const row of rows) {
-    const request = toOooRequest(row, disambiguateFirstNames());
+    // Same identity fill the webhook does, for rows whose delivery never landed.
+    const request = toOooRequest(await fillIdentity(notion, row), disambiguateFirstNames());
     try {
       // quiet: the webhook already alerted on anything blocked; re-alerting
       // every hour would turn a stuck row into a stuck channel.

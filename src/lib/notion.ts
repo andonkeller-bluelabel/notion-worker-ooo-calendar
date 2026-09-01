@@ -17,6 +17,8 @@ export type Notion = Client;
 export interface NotionPage {
   id: string;
   url?: string;
+  /** Page-level creator; only an id, with no email. Prefer the property. */
+  createdById?: string;
   /** True when the page is in the trash — the `page.deleted` case. */
   inTrash: boolean;
   properties: Record<string, any>;
@@ -57,11 +59,13 @@ export async function retrievePage(notion: Notion, pageId: string): Promise<Noti
     url?: string;
     in_trash?: boolean;
     archived?: boolean;
+    created_by?: { id?: string };
     properties?: Record<string, any>;
   };
   return {
     id: res.id,
     url: res.url,
+    createdById: res.created_by?.id,
     inTrash: Boolean(res.in_trash ?? res.archived),
     properties: res.properties ?? {},
   };
@@ -78,13 +82,26 @@ export async function queryAll(notion: Notion, dataSourceId: string, filter?: un
       start_cursor: cursor,
       page_size: 100,
     } as Parameters<Notion["dataSources"]["query"]>[0])) as {
-      results: Array<{ id: string; url?: string; in_trash?: boolean; archived?: boolean; properties?: Record<string, any> }>;
+      results: Array<{
+        id: string;
+        url?: string;
+        in_trash?: boolean;
+        archived?: boolean;
+        created_by?: { id?: string };
+        properties?: Record<string, any>;
+      }>;
       has_more: boolean;
       next_cursor: string | null;
     };
     for (const p of res.results ?? []) {
       if (p && p.id) {
-        out.push({ id: p.id, url: p.url, inTrash: Boolean(p.in_trash ?? p.archived), properties: p.properties ?? {} });
+        out.push({
+          id: p.id,
+          url: p.url,
+          createdById: p.created_by?.id,
+          inTrash: Boolean(p.in_trash ?? p.archived),
+          properties: p.properties ?? {},
+        });
       }
     }
     cursor = res.has_more ? (res.next_cursor ?? undefined) : undefined;
@@ -172,4 +189,30 @@ export function normalizeId(id: string): string {
 /** Canonical Notion URL for a page id, for when the API didn't return one. */
 export function pageUrl(pageId: string, url?: string): string {
   return url ?? `https://www.notion.so/${pageId.replace(/-/g, "")}`;
+}
+
+/**
+ * Reads a `created_by` property. Unlike the page-level `created_by`, the
+ * PROPERTY comes back expanded with the person's name and verified email, so a
+ * Core Request needs no extra user lookup.
+ *
+ * `isPerson` is false for integrations and bots. A request must never be
+ * attributed to one — the backfill rows, for instance, were created by an
+ * integration.
+ */
+export function readCreatedBy(page: NotionPage, prop: string): (NotionPerson & { isPerson: boolean }) | null {
+  const v = page.properties[prop] as Record<string, any> | undefined;
+  const u = v?.type === "created_by" ? v.created_by : undefined;
+  if (!u || typeof u.id !== "string") return null;
+  return {
+    id: u.id,
+    name: typeof u.name === "string" && u.name ? u.name : null,
+    email: typeof u.person?.email === "string" && u.person.email ? u.person.email : null,
+    isPerson: u.type === "person",
+  };
+}
+
+/** People-property value builder. */
+export function peopleValue(userIds: string[]) {
+  return { people: userIds.map((id) => ({ object: "user", id })) };
 }

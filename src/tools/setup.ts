@@ -44,6 +44,9 @@ const EXPECTED: ReadonlyArray<{ name: string; type: string; required: boolean }>
   { name: Ooo.STATUS, type: "status", required: true },
   { name: Ooo.O365_EVENT_ID, type: "rich_text", required: true },
   { name: Ooo.NOTIFIED_STATUS, type: "rich_text", required: true },
+  // Set as a hidden default by each form; identity fill degrades without it.
+  { name: Ooo.SOURCE, type: "select", required: false },
+  { name: Ooo.CREATED_BY, type: "created_by", required: false },
   // Read for the event body only; absence degrades the body, not the sync.
   { name: Ooo.APPROVER, type: "people", required: false },
   { name: Ooo.NOTES, type: "rich_text", required: false },
