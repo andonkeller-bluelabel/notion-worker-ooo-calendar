@@ -153,9 +153,13 @@ memory between runs, so without it `Requested → Denied` — which moves no cal
 leave no trace to notify on, and the sweep would either re-announce every approved row every ten
 minutes or miss transitions entirely.
 
-Announcing happens AFTER the calendar work, so a message never claims something that failed. A Slack
-outage cannot break the sync: the failure is logged and the row keeps its old `Notified Status`, so
-the next run tries again rather than going quiet.
+Announcing happens AFTER the calendar work, so a message never claims something that failed.
+
+`Notified Status` is recorded **only when the post actually lands**. Recording it regardless loses
+the message for good, because the next run then sees no change and stays quiet forever — which is
+exactly what a bad `SLACK_BOT_TOKEN` did here before `postSlackMessage` returned a result. A Slack
+failure still never breaks the calendar work: it is logged, the row keeps its old value, and the
+next reconcile retries.
 
 **When adding this to a database that already has rows, backfill `Notified Status` to each row's
 current status before deploying.** Otherwise the first run treats every existing row as new and

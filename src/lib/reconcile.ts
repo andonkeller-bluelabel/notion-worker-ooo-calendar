@@ -20,8 +20,11 @@ export interface ReconcileDeps {
   clearEventId: (pageId: string) => Promise<void>;
   /** Writes the row's `Title` so Notion reads the same as the calendar. */
   setTitle: (pageId: string, title: string) => Promise<void>;
-  /** Posts a routine notification to the team channel. Best-effort. */
-  announce: (text: string) => Promise<void>;
+  /**
+   * Posts a routine notification to the team channel. Returns whether it
+   * actually landed — a failed post must not be recorded as announced.
+   */
+  announce: (text: string) => Promise<boolean>;
   /** Records the status just announced, so it is not announced twice. */
   setNotifiedStatus: (pageId: string, status: string) => Promise<void>;
   /** True when the error from updateEvent/deleteEvent means "no such event". */
@@ -79,15 +82,23 @@ export async function reconcile(request: OooRequest, deps: ReconcileDeps): Promi
  * announced, then records the new one. Runs AFTER the calendar work, so a
  * message never claims something that failed to happen.
  *
- * Best-effort in both directions: a Slack outage must not stop the calendar
- * from being right, and a row whose `Notified Status` cannot be written is
- * left to announce again next time rather than going silent.
+ * `Notified Status` is recorded ONLY when the post actually landed. Recording
+ * it regardless loses the message for good: the next run sees no change and
+ * stays quiet forever. That is what a bad Slack token did here — the notice
+ * was dropped, the row was marked announced, and nothing ever retried.
+ *
+ * A Slack failure still never breaks the calendar work; it is logged, the row
+ * keeps its old value, and the next reconcile tries again.
  */
 async function announceIfChanged(request: OooRequest, deps: ReconcileDeps): Promise<void> {
   const announcement = announcementFor(request, Boolean(request.eventId));
   if (!announcement || deps.dryRun) return;
   try {
-    if (announcement.text) await deps.announce(announcement.text);
+    const posted = announcement.text ? await deps.announce(announcement.text) : true;
+    if (!posted) {
+      console.warn(`[reconcile] Slack rejected the notice for ${request.pageId}; leaving it to retry`);
+      return;
+    }
     await deps.setNotifiedStatus(request.pageId, announcement.status);
   } catch (err) {
     console.error(`[reconcile] couldn't announce ${request.pageId}:`, err);

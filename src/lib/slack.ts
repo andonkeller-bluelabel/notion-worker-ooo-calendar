@@ -19,11 +19,18 @@ export function slackLink(label: string, url: string | undefined | null): string
   return url ? `<${url}|${safe}>` : safe;
 }
 
-export async function postSlackMessage(channel: string, text: string): Promise<void> {
+/**
+ * Posts to Slack. Returns whether it actually landed.
+ *
+ * The RETURN VALUE matters: callers that record "this was announced" must not
+ * do so when the post failed, or the message is lost for good. A misconfigured
+ * token silently dropped a notification before this returned anything.
+ */
+export async function postSlackMessage(channel: string, text: string): Promise<boolean> {
   const token = slackBotToken();
   if (!token || !channel) {
     console.error("[slack] no token/channel — skipping message:", text);
-    return;
+    return false;
   }
   try {
     const res = await fetch("https://slack.com/api/chat.postMessage", {
@@ -32,9 +39,14 @@ export async function postSlackMessage(channel: string, text: string): Promise<v
       body: JSON.stringify({ channel, text }),
     });
     const body = (await res.json()) as { ok?: boolean; error?: string };
-    if (!body.ok) console.error(`[slack] chat.postMessage failed: ${body.error ?? res.status}`);
+    if (!body.ok) {
+      console.error(`[slack] chat.postMessage failed: ${body.error ?? res.status}`);
+      return false;
+    }
+    return true;
   } catch (err) {
     console.error("[slack] chat.postMessage threw:", err);
+    return false;
   }
 }
 

@@ -27,7 +27,9 @@ interface Harness {
   notices: string[];
 }
 
-function harness(opts: { missingEventIds?: string[]; dryRun?: boolean; newEventId?: string } = {}): Harness {
+function harness(
+  opts: { missingEventIds?: string[]; dryRun?: boolean; newEventId?: string; slackRejects?: boolean } = {},
+): Harness {
   const missing = new Set(opts.missingEventIds ?? []);
   const h: Partial<Harness> = { created: [], updated: [], deleted: [], stored: [], cleared: [], titles: [], announced: [], notified: [], notices: [] };
   h.deps = {
@@ -54,6 +56,7 @@ function harness(opts: { missingEventIds?: string[]; dryRun?: boolean; newEventI
     },
     announce: async (text) => {
       h.announced!.push(text);
+      return opts.slackRejects !== true;
     },
     setNotifiedStatus: async (pageId, status) => {
       h.notified!.push({ pageId, status });
@@ -305,4 +308,19 @@ test("a Slack failure never breaks the calendar work", async () => {
   };
   const result = await reconcile(request({ status: "Approved", notifiedStatus: null, eventId: null }), h.deps);
   assert.equal(result.action, "created", "the event still gets created");
+});
+
+test("a REJECTED post is not recorded as announced, so it retries", async () => {
+  // A bad Slack token dropped a notice and still marked the row announced,
+  // which meant the next run saw no change and stayed quiet forever.
+  const h = harness({ slackRejects: true });
+  await reconcile(request({ status: "Approved", notifiedStatus: "Requested" }), h.deps);
+  assert.equal(h.announced.length, 1, "it tried");
+  assert.deepEqual(h.notified, [], "but did NOT mark it announced");
+});
+
+test("a post that lands IS recorded, so it never repeats", async () => {
+  const h = harness();
+  await reconcile(request({ status: "Approved", notifiedStatus: "Requested" }), h.deps);
+  assert.deepEqual(h.notified, [{ pageId: "page-1", status: "Approved" }]);
 });
