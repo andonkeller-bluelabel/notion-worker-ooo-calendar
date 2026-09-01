@@ -64,11 +64,33 @@ export const Ooo = {
  * already exist on the database. We only ever read them.
  */
 export const ApprovalStatus = {
+  /** The form's default: nobody has looked at it yet. No calendar entry. */
   PENDING: "Pending",
-  REQUESTED: "Requested",
+  /** A human granted leave. On the calendar. */
   APPROVED: "Approved",
+  /**
+   * Happening, but nobody approved it — Work Related Travel is announced, not
+   * requested. On the calendar exactly like APPROVED; the two differ only in
+   * what they claim about how the row got there.
+   */
+  SCHEDULED: "Scheduled",
+  /** Refused or cancelled. No calendar entry. */
   DENIED: "Denied",
+  /**
+   * No longer an option on the database, kept so a row still carrying it (or a
+   * later decision to bring it back) behaves sensibly rather than silently.
+   */
+  REQUESTED: "Requested",
 } as const;
+
+/**
+ * The statuses that mean "this is happening, put it on the calendar".
+ *
+ * Two positives rather than one. `Status` is on neither form, so only someone
+ * with database access can set either — SCHEDULED is not a way for a requester
+ * to skip approval, it is an approver saying a trip is going ahead.
+ */
+export const CALENDAR_STATUSES: readonly string[] = [ApprovalStatus.APPROVED, ApprovalStatus.SCHEDULED];
 
 /**
  * Prefixed to the first name on every calendar event, e.g. "✈️ Andon".

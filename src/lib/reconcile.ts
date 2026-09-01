@@ -74,13 +74,13 @@ export interface ReconcileResult {
  * Symptom is a duplicate on the calendar; the fix is to delete one by hand.
  */
 export async function reconcile(input: OooRequest, deps: ReconcileDeps): Promise<ReconcileResult> {
-  // Work Related Travel needs no approval, so promote it before anything reads
-  // the status — the calendar branch and the Slack notice must both see the
-  // state the row is about to be in, not the one the form left behind.
+  // Work Related Travel needs no approval, so move it to SCHEDULED before
+  // anything reads the status — the calendar branch and the Slack notice must
+  // both see the state the row is about to be in, not the one the form left.
   let request = input;
   if (autoApproves(input)) {
-    if (!deps.dryRun) await deps.setStatus(input.pageId, ApprovalStatus.APPROVED);
-    request = { ...input, status: ApprovalStatus.APPROVED };
+    if (!deps.dryRun) await deps.setStatus(input.pageId, ApprovalStatus.SCHEDULED);
+    request = { ...input, status: ApprovalStatus.SCHEDULED };
   }
 
   const result = await reconcileCalendar(request, deps);

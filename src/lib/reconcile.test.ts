@@ -332,14 +332,28 @@ test("a post that lands IS recorded, so it never repeats", async () => {
 
 // --- Work Related Travel needs no approval ---
 
-test("travel left at Pending is promoted to Approved and lands on the calendar", async () => {
+test("travel left at Pending becomes Scheduled and lands on the calendar", async () => {
   const h = harness();
   const result = await reconcile(
     request({ type: "Work Related Travel", status: "Pending", notifiedStatus: null, eventId: null }),
     h.deps,
   );
-  assert.deepEqual(h.statuses, [{ pageId: "page-1", status: "Approved" }]);
+  // Scheduled, not Approved: nobody approved it, and the status should not
+  // claim otherwise.
+  assert.deepEqual(h.statuses, [{ pageId: "page-1", status: "Scheduled" }]);
   assert.equal(result.action, "created", "the calendar branch sees the promoted status, not Pending");
+});
+
+test("Scheduled puts a row on the calendar exactly like Approved", async () => {
+  const h = harness();
+  const result = await reconcile(request({ status: "Scheduled", notifiedStatus: "Scheduled", eventId: null }), h.deps);
+  assert.equal(result.action, "created");
+});
+
+test("un-scheduling removes the event, like any other non-calendar status", async () => {
+  const h = harness();
+  const result = await reconcile(request({ status: "Pending", notifiedStatus: "Scheduled", eventId: "EVT-1" }), h.deps);
+  assert.equal(result.action, "deleted");
 });
 
 test("the notice for travel says added, never approved — nobody approved it", async () => {
@@ -350,7 +364,7 @@ test("the notice for travel says added, never approved — nobody approved it", 
   );
   assert.match(h.announced[0]!, /added work related travel/);
   assert.doesNotMatch(h.announced[0]!, /approved/i);
-  assert.deepEqual(h.notified, [{ pageId: "page-1", status: "Approved" }]);
+  assert.deepEqual(h.notified, [{ pageId: "page-1", status: "Scheduled" }]);
 });
 
 test("a DENIED travel row stays denied — the worker never overrides a human", async () => {
@@ -360,10 +374,12 @@ test("a DENIED travel row stays denied — the worker never overrides a human", 
   assert.match(h.announced[0]!, /work related travel .* was cancelled/);
 });
 
-test("travel deliberately set back to Requested is left alone", async () => {
-  const h = harness();
-  await reconcile(request({ type: "Work Related Travel", status: "Requested", notifiedStatus: "Approved" }), h.deps);
-  assert.deepEqual(h.statuses, [], "Requested is a human decision, unlike Pending");
+test("travel a human already moved is left alone", async () => {
+  for (const status of ["Approved", "Denied", "Scheduled"]) {
+    const h = harness();
+    await reconcile(request({ type: "Work Related Travel", status, notifiedStatus: "Scheduled" }), h.deps);
+    assert.deepEqual(h.statuses, [], `${status} is a human decision, unlike Pending`);
+  }
 });
 
 test("PTO left at Pending is NOT auto-approved", async () => {

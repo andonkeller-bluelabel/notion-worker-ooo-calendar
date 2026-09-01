@@ -24,11 +24,27 @@ import { j } from "@notionhq/workers/schema-builder";
 import { worker } from "../worker.js";
 import { accessToken, graphRequest, safeExecute } from "../lib/graphClient.js";
 import { o365CalendarMailbox, oooDataSourceId, sweepLookaheadDays, sweepLookbackDays } from "../lib/env.js";
-import { Ooo } from "../lib/schema.js";
+import { ApprovalStatus, Ooo, RequestType } from "../lib/schema.js";
 import { P, readString, retrievePage, updateProps } from "../lib/notion.js";
 import { reconcilePage } from "../lib/liveReconcile.js";
 import { listAllEvents, listWorkerEvents, notionPageIdOf } from "../lib/graphCalendar.js";
 import { addDays, toDateOnly } from "../lib/oooRequest.js";
+
+/**
+ * Option names on a status property. Notion returns these as a FLAT `options`
+ * list; `groups` only holds ids referencing them, so reading options out of the
+ * groups finds nothing.
+ */
+function statusOptionNames(prop: unknown): string[] {
+  const opts = (prop as { status?: { options?: Array<{ name?: string }> } })?.status?.options ?? [];
+  return opts.map((o) => o.name ?? "").filter(Boolean);
+}
+
+/** Option names on a select property. */
+function selectOptionNames(prop: unknown): string[] {
+  const opts = (prop as { select?: { options?: Array<{ name?: string }> } })?.select?.options ?? [];
+  return opts.map((o) => o.name ?? "").filter(Boolean);
+}
 
 /**
  * The property names and Notion types this worker depends on, confirmed
@@ -92,6 +108,24 @@ worker.tool("checkOooSetup", {
             ok: actual?.type === expected.type || !expected.required,
           };
         }),
+        // Option-level drift, invisible to a name/type check. Removing a status
+        // option or renaming a Type option silently changes behaviour: the
+        // reconciler compares against these exact strings.
+        options: {
+          status: {
+            expected: [ApprovalStatus.PENDING, ApprovalStatus.APPROVED, ApprovalStatus.SCHEDULED, ApprovalStatus.DENIED],
+            actual: statusOptionNames(properties[Ooo.STATUS]),
+            missing: [ApprovalStatus.PENDING, ApprovalStatus.APPROVED, ApprovalStatus.SCHEDULED, ApprovalStatus.DENIED]
+              .filter((n) => !statusOptionNames(properties[Ooo.STATUS]).includes(n)),
+          },
+          type: {
+            expected: [RequestType.PTO, RequestType.TRAVEL],
+            actual: selectOptionNames(properties[Ooo.TYPE]),
+            missing: [RequestType.PTO, RequestType.TRAVEL].filter(
+              (n) => !selectOptionNames(properties[Ooo.TYPE]).includes(n),
+            ),
+          },
+        },
         // Everything the database actually has, so a rename is obvious.
         actualProperties: Object.entries(properties)
           .map(([name, prop]) => `${name} (${prop?.type ?? "?"})`)

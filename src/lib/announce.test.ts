@@ -81,10 +81,15 @@ test("an unrecognized status is recorded but not announced", () => {
 
 const TRAVEL = "Work Related Travel";
 
-test("approved travel reads as added, not approved", () => {
-  const a = announcementFor(request({ type: TRAVEL, status: "Approved", notifiedStatus: null }), false);
+test("scheduled travel reads as added, never approved", () => {
+  const a = announcementFor(request({ type: TRAVEL, status: "Scheduled", notifiedStatus: null }), false);
   assert.match(a!.text, /\*Danny\* added work related travel, Sep 10–14/);
   assert.doesNotMatch(a!.text, /approved/i);
+  assert.equal(a!.status, "Scheduled");
+});
+
+test("Scheduled says nothing twice, same as any other status", () => {
+  assert.equal(announcementFor(request({ type: TRAVEL, status: "Scheduled", notifiedStatus: "Scheduled" }), true), null);
 });
 
 test("approved leave still reads as approved", () => {
@@ -96,4 +101,35 @@ test("travel that is stopped reads as cancelled, not denied", () => {
   const a = announcementFor(request({ type: TRAVEL, status: "Denied", notifiedStatus: "Approved" }), true);
   assert.match(a!.text, /work related travel for Sep 10–14 was cancelled/);
   assert.doesNotMatch(a!.text, /denied/i);
+});
+
+// --- the note line ---
+
+test("a note is appended on its own line, under the message", () => {
+  const a = announcementFor(request({ notes: "Back online Monday" }), false);
+  assert.match(a!.text, /requested time off, Sep 10–14\. <[^>]+>\nNote: Back online Monday$/);
+});
+
+test("no note means no extra line", () => {
+  assert.doesNotMatch(announcementFor(request(), false)!.text, /\nNote:/);
+  assert.doesNotMatch(announcementFor(request({ notes: "   " }), false)!.text, /\nNote:/);
+});
+
+test("the note rides along on every status, not just the submission", () => {
+  for (const status of ["Approved", "Scheduled", "Denied"]) {
+    const a = announcementFor(request({ status, notifiedStatus: "Pending", notes: "context" }), false);
+    assert.match(a!.text, /\nNote: context$/, `status=${status}`);
+  }
+});
+
+test("a note cannot inject Slack markup", () => {
+  const a = announcementFor(request({ notes: "<!channel> & <https://evil|click>" }), false);
+  assert.match(a!.text, /Note: &lt;!channel&gt; &amp; &lt;https:\/\/evil\|click&gt;$/);
+});
+
+test("a very long note is trimmed rather than flooding the channel", () => {
+  const a = announcementFor(request({ notes: "x".repeat(500) }), false);
+  const note = a!.text.split("\nNote: ")[1]!;
+  assert.equal(note.length, 300);
+  assert.ok(note.endsWith("…"));
 });

@@ -28,7 +28,7 @@
 
 import * as Schema from "@notionhq/workers/schema";
 import { worker } from "../worker.js";
-import { Ooo, ApprovalStatus } from "../lib/schema.js";
+import { Ooo, CALENDAR_STATUSES } from "../lib/schema.js";
 import { pageUrl, queryAll, retrievePage, type Notion } from "../lib/notion.js";
 import { toOooRequest, addDays, isApproved } from "../lib/oooRequest.js";
 import { fillIdentity, reconcileRequest } from "../lib/liveReconcile.js";
@@ -71,7 +71,8 @@ export const sweepAnchorDb = worker.database("oooSweepAnchor", {
 });
 
 /**
- * Rows worth reconciling: anything Approved (should have an event) or still
+ * Rows worth reconciling: anything in a calendar status (should have an event)
+ * or still
  * carrying an event id (may need one removed) — AND within the calendar window
  * this sweep actually polices. A Requested row with no event id reconciles to a
  * no-op, so there is no reason to fetch it.
@@ -93,7 +94,7 @@ function sweepFilter(windowStartDate: string) {
       {
         or: [
           // `Status` is a status-type property, so the key is `status`, not `select`.
-          { property: Ooo.STATUS, status: { equals: ApprovalStatus.APPROVED } },
+          ...CALENDAR_STATUSES.map((name) => ({ property: Ooo.STATUS, status: { equals: name } })),
           { property: Ooo.O365_EVENT_ID, rich_text: { is_not_empty: true } },
         ],
       },

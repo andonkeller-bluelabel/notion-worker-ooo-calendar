@@ -200,8 +200,9 @@ test("no name and no email falls back rather than producing a bare plane", () =>
 
 // --- approval + blocking ---
 
-test("only 'Approved' means an event should exist — Pending included", () => {
-  for (const value of ["Pending", "Requested", "Denied", null, "approved"]) {
+test("Approved and Scheduled mean an event should exist; nothing else does", () => {
+  assert.equal(isApproved(toOooRequest(page({ ...APPROVED_ROW, Status: status("Scheduled") }))), true);
+  for (const value of ["Pending", "Requested", "Denied", null, "approved", "scheduled"]) {
     assert.equal(isApproved(toOooRequest(page({ ...APPROVED_ROW, Status: status(value) }))), false, `status=${value}`);
   }
   assert.equal(isApproved(toOooRequest(page(APPROVED_ROW))), true);

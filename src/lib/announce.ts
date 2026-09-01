@@ -27,9 +27,32 @@ export function formatRange(start: string, end: string): string {
   return s;
 }
 
-/** Slack `<url|label>`, with the characters Slack treats as markup escaped. */
+/** Escapes the three characters Slack treats as markup. */
+function esc(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+/** Slack `<url|label>`, with the label escaped. */
 function link(label: string, url: string): string {
-  return `<${url}|${label.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\|/g, "-")}>`;
+  return `<${url}|${esc(label).replace(/\|/g, "-")}>`;
+}
+
+/** Longest note we will repeat into Slack before trimming. */
+const MAX_NOTE = 300;
+
+/**
+ * The row's Notes, as a second line, or "" when there are none.
+ *
+ * Deliberately NOT on the calendar event — see graphCalendar.ts. Slack is a
+ * narrower audience than a company-wide calendar, so repeating it here is a
+ * different call from putting it in an event body, but it is still a broadcast:
+ * whatever someone types into Notes reaches everyone in the channel.
+ */
+function noteLine(notes: string | null): string {
+  const text = (notes ?? "").trim();
+  if (!text) return "";
+  const trimmed = text.length > MAX_NOTE ? `${text.slice(0, MAX_NOTE - 1)}…` : text;
+  return `\nNote: ${esc(trimmed)}`;
 }
 
 export interface Announcement {
@@ -50,6 +73,14 @@ export interface Announcement {
  * an un-approval can mention that the entry came off the calendar.
  */
 export function announcementFor(request: OooRequest, hadEvent: boolean): Announcement | null {
+  const announcement = buildAnnouncement(request, hadEvent);
+  // Append the note to whatever the status produced, so every message carries
+  // it rather than only the submission one.
+  if (!announcement || !announcement.text) return announcement;
+  return { ...announcement, text: announcement.text + noteLine(request.notes) };
+}
+
+function buildAnnouncement(request: OooRequest, hadEvent: boolean): Announcement | null {
   const status = request.status;
   if (!status || request.inTrash) return null;
   if (status === request.notifiedStatus) return null;
@@ -61,6 +92,8 @@ export function announcementFor(request: OooRequest, hadEvent: boolean): Announc
   const isTravel = request.type === RequestType.TRAVEL;
 
   switch (status) {
+    case ApprovalStatus.SCHEDULED:
+      return { status, text: `:airplane: ${who} added work related travel, ${when}. ${open}` };
     case ApprovalStatus.APPROVED:
       // Travel is announced rather than granted, so it never reads as an
       // approval — nobody approved it, and saying so would be misleading.

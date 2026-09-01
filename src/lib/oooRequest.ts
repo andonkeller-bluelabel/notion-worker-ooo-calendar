@@ -7,7 +7,7 @@
  * easy to get subtly wrong.
  */
 
-import { Ooo, ApprovalStatus, AWAY_MARKER, RequestType } from "./schema.js";
+import { Ooo, ApprovalStatus, AWAY_MARKER, CALENDAR_STATUSES, RequestType } from "./schema.js";
 import { readDateEnd, readDateStart, readPeople, readString, pageUrl, type NotionPage } from "./notion.js";
 
 export interface OooRequest {
@@ -192,10 +192,13 @@ export function toOooRequest(page: NotionPage, disambiguate: readonly string[] =
  * Whether this row should skip approval entirely.
  *
  * Work Related Travel is announced, not requested: nobody grants permission for
- * a client onsite. Only `Pending` is promoted — the status a form leaves behind
- * when no human has looked at the row yet. `Requested`, `Denied` and `Approved`
- * are all deliberate human states, so the worker never overrides them, which
- * means someone can still deny a travel entry and have it stay denied.
+ * a client onsite, so it goes straight to SCHEDULED — a status that says it is
+ * happening without claiming anyone approved it.
+ *
+ * Only `Pending` is promoted, the status a form leaves behind when no human has
+ * looked at the row yet. Every other status is a deliberate human decision and
+ * the worker never overrides one, so someone can stop a travel entry and have
+ * it stay stopped.
  */
 export function autoApproves(request: OooRequest): boolean {
   return (
@@ -203,9 +206,15 @@ export function autoApproves(request: OooRequest): boolean {
   );
 }
 
-/** True when this row says an event should exist on the shared calendar. */
+/**
+ * True when this row says an event should exist on the shared calendar.
+ *
+ * Approved (a human granted leave) and Scheduled (travel, which nobody
+ * approves) both qualify. Everything else — Pending, Denied, blank, or a
+ * trashed page — does not.
+ */
 export function isApproved(request: OooRequest): boolean {
-  return !request.inTrash && request.status === ApprovalStatus.APPROVED;
+  return !request.inTrash && CALENDAR_STATUSES.includes(request.status ?? "");
 }
 
 /**

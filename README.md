@@ -99,7 +99,7 @@ property. The worker reads every column and writes exactly one.
 | BlueLabeler | people | read (**preferred** identity: the display name shown on the calendar) |
 | Your Email | email | read (identity fallback when BlueLabeler is empty) |
 | Dates | date **range** | read (`start` = first day off, `end` = **inclusive** last day off) |
-| Status | **status** — Pending, Requested, Approved, Denied | read |
+| Status | **status** — Pending, Scheduled, Approved, Denied | read + write (travel only) |
 | Approver | people, optional | read (named in the event body) |
 | Notes | rich_text, optional | read (stays in Notion — never written to the calendar) |
 | Type | select — Paid Time Off, Work Related Travel | read (**Travel auto-approves**) |
@@ -145,9 +145,14 @@ attributed to an integration or bot.
 ## Work Related Travel needs no approval
 
 A client onsite is announced, not requested: nobody grants permission for it. A
-`Type` of **Work Related Travel** left at `Pending` is promoted to `Approved`
+`Type` of **Work Related Travel** left at `Pending` moves to **`Scheduled`**
 before anything reads the status, so the calendar entry and the Slack notice
 both see the state the row is about to be in rather than the one the form left.
+
+`Scheduled` and `Approved` both put a row on the calendar; `Pending` and
+`Denied` do not. Two positives rather than one, because `Approved` would assert
+a decision nobody made. This is not a way to skip approval: `Status` is on
+neither form, so only someone with database access can set either.
 
 Only `Pending` is promoted. `Requested`, `Denied` and `Approved` are deliberate
 human states and the worker never overrides them, so someone can stop a travel
@@ -170,6 +175,11 @@ leave no trace to notify on, and the sweep would either re-announce every approv
 minutes or miss transitions entirely.
 
 Announcing happens AFTER the calendar work, so a message never claims something that failed.
+
+If the row has `Notes`, they are appended as a second line, `Note: …`, escaped
+and trimmed at 300 characters. They stay off the calendar event (see above);
+Slack is a narrower audience, but it is still a broadcast to everyone in the
+channel.
 
 `Notified Status` is recorded **only when the post actually lands**. Recording it regardless loses
 the message for good, because the next run then sees no change and stays quiet forever — which is
