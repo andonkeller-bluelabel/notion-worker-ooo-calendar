@@ -127,11 +127,13 @@ export function calendarNameFor(
   const preferred = notionName ?? words[0] ?? null;
   if (!preferred) return fallback;
 
+  // First name only, whatever the source. Some Notion profiles store a full
+  // name ("Ralph Barile"), and a calendar of full names reads like a directory.
   const first = preferred.split(/\s+/)[0] ?? preferred;
-  if (!disambiguate.some((n) => n.toLowerCase() === first.toLowerCase())) return preferred;
+  if (!disambiguate.some((n) => n.toLowerCase() === first.toLowerCase())) return first;
 
-  // Shared first name: add a last name if we have one to add.
-  if (preferred.includes(" ")) return preferred; // the Notion name already has one
+  // Shared first name: use the full name, from the profile or the address.
+  if (preferred.includes(" ")) return preferred;
   const last = words[1];
   return last ? `${preferred} ${last}` : preferred;
 }

@@ -60,9 +60,14 @@ worker.tool("checkOooSetup", {
       .string()
       .describe("A row in OOO Entries. Its O365 Event ID is read and written back unchanged, to prove the column is writable. Pass null to skip that check.")
       .nullable(),
+    lookbackDays: j
+      .number()
+      .describe("Override how far back workerEvents scans. Defaults to OOO_SWEEP_LOOKBACK_DAYS. Use it to audit history the sweep deliberately does not scan on every run.")
+      .nullable(),
+    lookaheadDays: j.number().describe("Override how far ahead workerEvents scans.").nullable(),
   }),
   hints: { readOnlyHint: false },
-  execute: async ({ samplePageId }, { notion }) =>
+  execute: async ({ samplePageId, lookbackDays, lookaheadDays }, { notion }) =>
     safeExecute(async (): Promise<Record<string, JSONValue>> => {
       const report: Record<string, JSONValue> = {};
 
@@ -146,13 +151,19 @@ worker.tool("checkOooSetup", {
       // orphan cleanup is silently doing nothing.
       try {
         const today = new Date().toISOString().slice(0, 10);
-        const events = await listWorkerEvents(
-          `${addDays(today, -sweepLookbackDays())}T00:00:00`,
-          `${addDays(today, sweepLookaheadDays())}T00:00:00`,
-        );
+        const back = lookbackDays && lookbackDays > 0 ? Math.floor(lookbackDays) : sweepLookbackDays();
+        const ahead = lookaheadDays && lookaheadDays > 0 ? Math.floor(lookaheadDays) : sweepLookaheadDays();
+        const events = await listWorkerEvents(`${addDays(today, -back)}T00:00:00`, `${addDays(today, ahead)}T00:00:00`);
+        // Two events sharing a page id is the signature of a duplicate.
+        const seen = new Map<string, number>();
+        for (const { pageId } of events) seen.set(pageId, (seen.get(pageId) ?? 0) + 1);
+        const duplicated = [...seen.entries()].filter(([, n]) => n > 1);
         report.workerEvents = {
           ok: true,
+          window: `${back}d back / ${ahead}d ahead`,
           traceable: events.length,
+          distinctRows: seen.size,
+          duplicatedRows: duplicated.length,
           events: events.map(({ pageId, event }) => ({
             subject: event.subject ?? null,
             isAllDay: event.isAllDay ?? null,

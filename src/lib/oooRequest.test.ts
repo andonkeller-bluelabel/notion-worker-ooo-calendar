@@ -175,6 +175,12 @@ test("a shared first name gets the full name, case-insensitively", () => {
   assert.equal(calendarNameFor(null, "andon.keller@bluelabellabs.com", "fb", ["chris"]), "Andon");
 });
 
+test("a full-name Notion profile still shows only the first name", () => {
+  // Some profiles store "Ralph Barile"; the calendar shows "Ralph".
+  assert.equal(calendarNameFor("Ralph Barile", "ralph.barile@bluelabellabs.com", "fb"), "Ralph");
+  assert.equal(calendarNameFor("Victor Guerreiro", "victor.guerreiro@bluelabellabs.com", "fb"), "Victor");
+});
+
 test("disambiguation still applies to a BlueLabeler name", () => {
   assert.equal(calendarNameFor("Chris", "chris.boyle@bluelabellabs.com", "fb", ["chris"]), "Chris Boyle");
   // A Notion name that already carries a surname is left alone.
