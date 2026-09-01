@@ -22,6 +22,7 @@ interface Harness {
   stored: Array<{ pageId: string; eventId: string }>;
   cleared: string[];
   titles: Array<{ pageId: string; title: string }>;
+  statuses: Array<{ pageId: string; status: string }>;
   announced: string[];
   notified: Array<{ pageId: string; status: string }>;
   notices: string[];
@@ -31,7 +32,7 @@ function harness(
   opts: { missingEventIds?: string[]; dryRun?: boolean; newEventId?: string; slackRejects?: boolean } = {},
 ): Harness {
   const missing = new Set(opts.missingEventIds ?? []);
-  const h: Partial<Harness> = { created: [], updated: [], deleted: [], stored: [], cleared: [], titles: [], announced: [], notified: [], notices: [] };
+  const h: Partial<Harness> = { created: [], updated: [], deleted: [], stored: [], cleared: [], titles: [], statuses: [], announced: [], notified: [], notices: [] };
   h.deps = {
     createEvent: async (request) => {
       h.created!.push(request);
@@ -61,6 +62,9 @@ function harness(
     setNotifiedStatus: async (pageId, status) => {
       h.notified!.push({ pageId, status });
     },
+    setStatus: async (pageId, status) => {
+      h.statuses!.push({ pageId, status });
+    },
     isNotFound: (err) => err instanceof NotFound,
     notify: async (text) => {
       h.notices!.push(text);
@@ -82,6 +86,7 @@ function request(over: Partial<OooRequest> = {}): OooRequest {
     personEmail: "andon.keller@bluelabellabs.com",
     approverName: null,
     notes: null,
+    type: "Paid Time Off",
     startDate: "2026-09-07",
     endDate: "2026-09-11",
     status: "Approved",
@@ -323,4 +328,53 @@ test("a post that lands IS recorded, so it never repeats", async () => {
   const h = harness();
   await reconcile(request({ status: "Approved", notifiedStatus: "Requested" }), h.deps);
   assert.deepEqual(h.notified, [{ pageId: "page-1", status: "Approved" }]);
+});
+
+// --- Work Related Travel needs no approval ---
+
+test("travel left at Pending is promoted to Approved and lands on the calendar", async () => {
+  const h = harness();
+  const result = await reconcile(
+    request({ type: "Work Related Travel", status: "Pending", notifiedStatus: null, eventId: null }),
+    h.deps,
+  );
+  assert.deepEqual(h.statuses, [{ pageId: "page-1", status: "Approved" }]);
+  assert.equal(result.action, "created", "the calendar branch sees the promoted status, not Pending");
+});
+
+test("the notice for travel says added, never approved — nobody approved it", async () => {
+  const h = harness();
+  await reconcile(
+    request({ type: "Work Related Travel", status: "Pending", notifiedStatus: null, eventId: null }),
+    h.deps,
+  );
+  assert.match(h.announced[0]!, /added work related travel/);
+  assert.doesNotMatch(h.announced[0]!, /approved/i);
+  assert.deepEqual(h.notified, [{ pageId: "page-1", status: "Approved" }]);
+});
+
+test("a DENIED travel row stays denied — the worker never overrides a human", async () => {
+  const h = harness();
+  await reconcile(request({ type: "Work Related Travel", status: "Denied", notifiedStatus: "Approved" }), h.deps);
+  assert.deepEqual(h.statuses, [], "no promotion");
+  assert.match(h.announced[0]!, /work related travel .* was cancelled/);
+});
+
+test("travel deliberately set back to Requested is left alone", async () => {
+  const h = harness();
+  await reconcile(request({ type: "Work Related Travel", status: "Requested", notifiedStatus: "Approved" }), h.deps);
+  assert.deepEqual(h.statuses, [], "Requested is a human decision, unlike Pending");
+});
+
+test("PTO left at Pending is NOT auto-approved", async () => {
+  const h = harness();
+  const result = await reconcile(request({ status: "Pending", notifiedStatus: null, eventId: null }), h.deps);
+  assert.deepEqual(h.statuses, []);
+  assert.equal(result.action, "noop", "no calendar entry until a human approves");
+});
+
+test("dry run promotes nothing", async () => {
+  const h = harness({ dryRun: true });
+  await reconcile(request({ type: "Work Related Travel", status: "Pending" }), h.deps);
+  assert.deepEqual(h.statuses, []);
 });

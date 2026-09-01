@@ -38,7 +38,9 @@ export const Ooo = {
   /** status (NOT select) — Pending | Requested | Approved | Denied. */
   STATUS: "Status",
   APPROVER: "Approver", // people, optional — named in the event body
-  NOTES: "Notes", // rich_text, optional — carried into the event body
+  NOTES: "Notes", // rich_text, optional
+  /** select — Paid Time Off | Work Related Travel. */
+  TYPE: "Type",
   /** rich_text, hidden. Worker-owned: the Graph event id, or empty. */
   O365_EVENT_ID: "O365 Event ID",
   /**
@@ -74,6 +76,17 @@ export const ApprovalStatus = {
  * entries scan as a list of icons rather than a ragged right edge.
  */
 export const AWAY_MARKER = "✈️";
+
+/**
+ * `Type` option names.
+ *
+ * TRAVEL is auto-approved: a client onsite is something a person announces,
+ * not something they ask permission for. See `autoApproves` in oooRequest.ts.
+ */
+export const RequestType = {
+  PTO: "Paid Time Off",
+  TRAVEL: "Work Related Travel",
+} as const;
 
 /**
  * `Source` option names, one per form.

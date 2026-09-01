@@ -46,6 +46,7 @@ export function liveDeps(notion: Notion, options: LiveOptions = {}): ReconcileDe
     announce: (text) => postSlackMessage(notifyChannel(), text),
     setNotifiedStatus: (pageId, status) =>
       updateProps(notion, pageId, { [Ooo.NOTIFIED_STATUS]: P.richText(status) }),
+    setStatus: (pageId, status) => updateProps(notion, pageId, { [Ooo.STATUS]: { status: { name: status } } }),
     isNotFound,
     notify: options.quiet ? undefined : notifyOps,
     dryRun: isDryRun(),

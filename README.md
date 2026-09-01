@@ -102,6 +102,7 @@ property. The worker reads every column and writes exactly one.
 | Status | **status** — Pending, Requested, Approved, Denied | read |
 | Approver | people, optional | read (named in the event body) |
 | Notes | rich_text, optional | read (stays in Notion — never written to the calendar) |
+| Type | select — Paid Time Off, Work Related Travel | read (**Travel auto-approves**) |
 | **O365 Event ID** | rich_text, hidden | **read + write — worker-owned** |
 | **Notified Status** | rich_text, hidden | **read + write — worker-owned** |
 | Created by | created_by | read (carries a verified email) |
@@ -140,6 +141,21 @@ The worker only ever fills a blank. A value a human set — filing on a
 colleague's behalf, or correcting a bad attribution — is never overwritten, so
 the sweep cannot undo a correction ten minutes later. A request is never
 attributed to an integration or bot.
+
+## Work Related Travel needs no approval
+
+A client onsite is announced, not requested: nobody grants permission for it. A
+`Type` of **Work Related Travel** left at `Pending` is promoted to `Approved`
+before anything reads the status, so the calendar entry and the Slack notice
+both see the state the row is about to be in rather than the one the form left.
+
+Only `Pending` is promoted. `Requested`, `Denied` and `Approved` are deliberate
+human states and the worker never overrides them, so someone can stop a travel
+entry and have it stay stopped.
+
+The wording follows: travel reads *"added work related travel"* and, when
+stopped, *"cancelled"* — never *"approved"* or *"denied"*, because nobody
+approved or denied it.
 
 ## Slack notifications
 

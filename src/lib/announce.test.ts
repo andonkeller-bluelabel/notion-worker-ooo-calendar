@@ -16,6 +16,7 @@ function request(over: Partial<OooRequest> = {}): OooRequest {
     personEmail: "daniel.deserto@bluelabellabs.com",
     approverName: null,
     notes: null,
+    type: "Paid Time Off",
     startDate: "2026-09-10",
     endDate: "2026-09-14",
     status: "Requested",
@@ -47,7 +48,7 @@ test("formatRange adds years only when the range crosses one", () => {
 test("a submission names the person, the dates, and links the row", () => {
   const a = announcementFor(request(), false);
   assert.match(a!.text, /\*Danny\* requested time off, Sep 10–14/);
-  assert.match(a!.text, /<https:\/\/app\.notion\.com\/p1\|the request>/);
+  assert.match(a!.text, /<https:\/\/app\.notion\.com\/p1\|details>/);
   assert.equal(a!.status, "Requested");
 });
 
@@ -74,4 +75,25 @@ test("an unrecognized status is recorded but not announced", () => {
   const a = announcementFor(request({ status: "Archived" }), false);
   assert.equal(a!.text, "");
   assert.equal(a!.status, "Archived");
+});
+
+// --- travel reads differently from leave ---
+
+const TRAVEL = "Work Related Travel";
+
+test("approved travel reads as added, not approved", () => {
+  const a = announcementFor(request({ type: TRAVEL, status: "Approved", notifiedStatus: null }), false);
+  assert.match(a!.text, /\*Danny\* added work related travel, Sep 10–14/);
+  assert.doesNotMatch(a!.text, /approved/i);
+});
+
+test("approved leave still reads as approved", () => {
+  const a = announcementFor(request({ status: "Approved", notifiedStatus: "Requested" }), false);
+  assert.match(a!.text, /approved and on the team calendar/);
+});
+
+test("travel that is stopped reads as cancelled, not denied", () => {
+  const a = announcementFor(request({ type: TRAVEL, status: "Denied", notifiedStatus: "Approved" }), true);
+  assert.match(a!.text, /work related travel for Sep 10–14 was cancelled/);
+  assert.doesNotMatch(a!.text, /denied/i);
 });

@@ -9,7 +9,8 @@
  * no network — the pattern lib/router.ts uses in the Read.ai worker.
  */
 
-import { isApproved, blockedReason, eventSubject, type OooRequest } from "./oooRequest.js";
+import { autoApproves, isApproved, blockedReason, eventSubject, type OooRequest } from "./oooRequest.js";
+import { ApprovalStatus } from "./schema.js";
 import { announcementFor } from "./announce.js";
 
 export interface ReconcileDeps {
@@ -27,6 +28,8 @@ export interface ReconcileDeps {
   announce: (text: string) => Promise<boolean>;
   /** Records the status just announced, so it is not announced twice. */
   setNotifiedStatus: (pageId: string, status: string) => Promise<void>;
+  /** Moves a row's `Status`. Used only to auto-approve Work Related Travel. */
+  setStatus: (pageId: string, status: string) => Promise<void>;
   /** True when the error from updateEvent/deleteEvent means "no such event". */
   isNotFound: (err: unknown) => boolean;
   /** Best-effort operational notice. Never throws into the reconciler. */
@@ -70,8 +73,16 @@ export interface ReconcileResult {
  * it either, because the orphaned event still points at a live, approved page.
  * Symptom is a duplicate on the calendar; the fix is to delete one by hand.
  */
-export async function reconcile(request: OooRequest, deps: ReconcileDeps): Promise<ReconcileResult> {
-  const { pageId, eventId } = request;
+export async function reconcile(input: OooRequest, deps: ReconcileDeps): Promise<ReconcileResult> {
+  // Work Related Travel needs no approval, so promote it before anything reads
+  // the status — the calendar branch and the Slack notice must both see the
+  // state the row is about to be in, not the one the form left behind.
+  let request = input;
+  if (autoApproves(input)) {
+    if (!deps.dryRun) await deps.setStatus(input.pageId, ApprovalStatus.APPROVED);
+    request = { ...input, status: ApprovalStatus.APPROVED };
+  }
+
   const result = await reconcileCalendar(request, deps);
   await announceIfChanged(request, deps);
   return result;

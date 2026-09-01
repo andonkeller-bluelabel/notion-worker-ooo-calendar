@@ -7,7 +7,7 @@
  * easy to get subtly wrong.
  */
 
-import { Ooo, ApprovalStatus, AWAY_MARKER } from "./schema.js";
+import { Ooo, ApprovalStatus, AWAY_MARKER, RequestType } from "./schema.js";
 import { readDateEnd, readDateStart, readPeople, readString, pageUrl, type NotionPage } from "./notion.js";
 
 export interface OooRequest {
@@ -19,8 +19,10 @@ export interface OooRequest {
   calendarName: string;
   personEmail: string | null;
   approverName: string | null;
-  /** Free text from the row's Notes column, carried into the event body. */
+  /** Free text from the row's Notes column. Stays in Notion. */
   notes: string | null;
+  /** `Type`, or null when unset. */
+  type: string | null;
   /** First day off, `YYYY-MM-DD`. Null when the row hasn't been filled in. */
   startDate: string | null;
   /** Last day off, INCLUSIVE, `YYYY-MM-DD`. Equals startDate for a single day. */
@@ -174,6 +176,7 @@ export function toOooRequest(page: NotionPage, disambiguate: readonly string[] =
     personEmail: email,
     approverName: readPeople(page, Ooo.APPROVER)[0]?.name ?? null,
     notes: readString(page, Ooo.NOTES),
+    type: readString(page, Ooo.TYPE),
     startDate,
     endDate,
     status: readString(page, Ooo.STATUS),
@@ -183,6 +186,21 @@ export function toOooRequest(page: NotionPage, disambiguate: readonly string[] =
     hasIdentity: Boolean(notionName ?? email),
     inTrash: page.inTrash,
   };
+}
+
+/**
+ * Whether this row should skip approval entirely.
+ *
+ * Work Related Travel is announced, not requested: nobody grants permission for
+ * a client onsite. Only `Pending` is promoted — the status a form leaves behind
+ * when no human has looked at the row yet. `Requested`, `Denied` and `Approved`
+ * are all deliberate human states, so the worker never overrides them, which
+ * means someone can still deny a travel entry and have it stay denied.
+ */
+export function autoApproves(request: OooRequest): boolean {
+  return (
+    !request.inTrash && request.type === RequestType.TRAVEL && request.status === ApprovalStatus.PENDING
+  );
 }
 
 /** True when this row says an event should exist on the shared calendar. */

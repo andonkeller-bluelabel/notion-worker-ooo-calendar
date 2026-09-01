@@ -38,6 +38,7 @@ const APPROVED_ROW = {
   Status: status("Approved"),
   Approver: person("Jane Approver"),
   Notes: richText(null),
+  Type: { type: "select", select: { name: "Paid Time Off" } },
   "O365 Event ID": richText(null),
 };
 

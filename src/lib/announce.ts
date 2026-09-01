@@ -8,7 +8,7 @@
  * makes `Requested → Denied` announceable, since it moves no event.
  */
 
-import { ApprovalStatus } from "./schema.js";
+import { ApprovalStatus, RequestType } from "./schema.js";
 import type { OooRequest } from "./oooRequest.js";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -56,21 +56,23 @@ export function announcementFor(request: OooRequest, hadEvent: boolean): Announc
 
   const who = `*${request.calendarName}*`;
   const when = request.startDate && request.endDate ? formatRange(request.startDate, request.endDate) : "dates not set";
-  const open = link("the request", request.pageUrl);
+  const open = link("details", request.pageUrl);
   const firstTime = !request.notifiedStatus;
+  const isTravel = request.type === RequestType.TRAVEL;
 
   switch (status) {
     case ApprovalStatus.APPROVED:
-      return {
-        status,
-        text: `:white_check_mark: ${who} is off ${when} — approved and on the team calendar. ${open}`,
-      };
+      // Travel is announced rather than granted, so it never reads as an
+      // approval — nobody approved it, and saying so would be misleading.
+      return isTravel
+        ? { status, text: `:airplane: ${who} added work related travel, ${when}. ${open}` }
+        : { status, text: `:white_check_mark: ${who} is off ${when} — approved and on the team calendar. ${open}` };
     case ApprovalStatus.DENIED:
       return {
         status,
         text:
-          `:x: ${who}'s time off for ${when} was denied.` +
-          `${hadEvent ? " Removed from the team calendar." : ""} ${open}`,
+          `:x: ${who}'s ${isTravel ? "work related travel" : "time off"} for ${when} was ` +
+          `${isTravel ? "cancelled" : "denied"}.${hadEvent ? " Removed from the team calendar." : ""} ${open}`,
       };
     case ApprovalStatus.REQUESTED:
     case ApprovalStatus.PENDING:
@@ -79,8 +81,8 @@ export function announcementFor(request: OooRequest, hadEvent: boolean): Announc
         : {
             status,
             text:
-              `:arrows_counterclockwise: ${who}'s time off for ${when} is back to ${status}.` +
-              `${hadEvent ? " Removed from the team calendar." : ""} ${open}`,
+              `:arrows_counterclockwise: ${who}'s ${isTravel ? "work related travel" : "time off"} for ` +
+              `${when} is back to ${status}.${hadEvent ? " Removed from the team calendar." : ""} ${open}`,
           };
     default:
       // An unrecognized status option. Record it so we don't loop, say nothing.
