@@ -9,7 +9,7 @@
  */
 
 import { ApprovalStatus, CALENDAR_STATUSES, RequestType } from "./schema.js";
-import type { OooRequest } from "./oooRequest.js";
+import { blockedReason, type OooRequest } from "./oooRequest.js";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -53,6 +53,11 @@ const MAX_NOTE = 300;
  */
 function actionLine(request: OooRequest): string {
   const decided = request.status === ApprovalStatus.DENIED || CALENDAR_STATUSES.includes(request.status ?? "");
+  // A decided row that cannot become an event is the more urgent ask: it looks
+  // handled and is not.
+  if (decided && blockedReason(request)) {
+    return `\n\n*ACTION:* ${link("Add the dates.", request.pageUrl)}`;
+  }
   if (decided || request.approverId) return "";
   // The link rides on the action rather than sitting separately, so the message
   // carries exactly one link to the row and it is on the thing to click.
@@ -106,6 +111,27 @@ function buildAnnouncement(request: OooRequest, hadEvent: boolean, open: string)
   if (status === request.notifiedStatus) return null;
 
   const who = `*${request.calendarName}*`;
+
+  // Approved or scheduled, but unusable. Say so plainly rather than claiming a
+  // calendar entry that the reconciler refused to create.
+  //
+  // The recorded status carries a ":blocked" suffix so this announces once, and
+  // filling the dates in — which leaves `Status` unchanged — still produces the
+  // real approval notice rather than silence.
+  const blocked = CALENDAR_STATUSES.includes(status) ? blockedReason(request) : null;
+  if (blocked) {
+    // Dedupe against the blocked key, not the bare status: the guard above
+    // compares the raw value and would let this repeat every run.
+    const key = `${status}:blocked`;
+    if (key === request.notifiedStatus) return null;
+    return {
+      status: key,
+      text:
+        `:warning: ${who}'s ${request.type ?? "time off"} is ${status.toLowerCase()} but has ` +
+        `${blocked} — nothing goes on the team calendar until that's fixed.`,
+    };
+  }
+
   const when = request.startDate && request.endDate ? formatRange(request.startDate, request.endDate) : "dates not set";
   const firstTime = !request.notifiedStatus;
   const isTravel = request.type === RequestType.TRAVEL;

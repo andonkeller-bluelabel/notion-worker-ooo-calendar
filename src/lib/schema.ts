@@ -114,6 +114,7 @@ export const AWAY_MARKER = "✈️";
  */
 export const RequestType = {
   PTO: "Paid Time Off",
+  UNPAID: "Unpaid Time Off",
   TRAVEL: "Work Related Travel",
 } as const;
 

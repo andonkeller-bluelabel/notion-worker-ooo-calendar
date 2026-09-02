@@ -169,3 +169,55 @@ test("the note comes first, then the action", () => {
   const a = announcementFor(request({ approverId: null, notes: "context" }), false);
   assert.match(a!.text, /\nNote: context\n\n\*ACTION:\* <[^>]+\|Assign an approver\.>$/);
 });
+
+// --- approved but unusable ---
+
+test("an approved row with no dates does NOT claim to be on the calendar", () => {
+  // It said "is off dates not set — approved and on the team calendar", which
+  // was false: the reconciler refuses to create an event for a dateless row.
+  const a = announcementFor(request({ status: "Approved", notifiedStatus: "Pending", startDate: null, endDate: null }), false);
+  assert.doesNotMatch(a!.text, /on the team calendar\./);
+  assert.match(a!.text, /is approved but has no Dates set/);
+  assert.match(a!.text, /nothing goes on the team calendar until that's fixed/);
+});
+
+test("a blocked row asks for dates, not for an approver", () => {
+  const a = announcementFor(request({ status: "Approved", notifiedStatus: "Pending", startDate: null, endDate: null }), false);
+  assert.match(a!.text, /\*ACTION:\* <[^>]+\|Add the dates\.>$/);
+  assert.doesNotMatch(a!.text, /Assign an approver/);
+});
+
+test("a blocked row records a distinct status, so fixing the dates still announces", () => {
+  const blocked = announcementFor(request({ status: "Approved", notifiedStatus: "Pending", startDate: null, endDate: null }), false);
+  assert.equal(blocked!.status, "Approved:blocked");
+  // Quiet while it stays broken.
+  assert.equal(
+    announcementFor(request({ status: "Approved", notifiedStatus: "Approved:blocked", startDate: null, endDate: null }), false),
+    null,
+  );
+  // Dates filled in: Status never changed, but the real approval still fires.
+  const fixed = announcementFor(request({ status: "Approved", notifiedStatus: "Approved:blocked" }), false);
+  assert.match(fixed!.text, /approved and on the team calendar/);
+});
+
+test("a reversed date range is caught too, not just an empty one", () => {
+  const a = announcementFor(
+    request({ status: "Approved", notifiedStatus: "Pending", startDate: "2026-09-11", endDate: "2026-09-07" }),
+    false,
+  );
+  assert.match(a!.text, /ends .* before it starts/);
+});
+
+test("scheduled travel with no dates says scheduled, not approved", () => {
+  const a = announcementFor(
+    request({ status: "Scheduled", notifiedStatus: null, type: "Work Related Travel", startDate: null, endDate: null }),
+    false,
+  );
+  assert.match(a!.text, /is scheduled but has no Dates set/);
+});
+
+test("Unpaid Time Off reads like leave, not travel", () => {
+  const a = announcementFor(request({ status: "Approved", notifiedStatus: "Pending", type: "Unpaid Time Off" }), false);
+  assert.match(a!.text, /approved and on the team calendar/);
+  assert.doesNotMatch(a!.text, /work related travel/i);
+});

@@ -127,7 +127,7 @@ property. The worker reads every column and writes exactly one.
 | Status | **status** — Pending, Scheduled, Approved, Denied | read + write (travel only) |
 | Approver | people, optional | read (named in the event body) |
 | Notes | rich_text, optional | read (stays in Notion — never written to the calendar) |
-| Type | select — Paid Time Off, Work Related Travel | read (**Travel auto-approves**) |
+| Type | select — Paid Time Off, Unpaid Time Off, Work Related Travel | read (**Travel auto-schedules**) |
 | **O365 Event ID** | rich_text, hidden | **read + write — worker-owned** |
 | **Notified Status** | rich_text, hidden | **read + write — worker-owned** |
 | **Notified Approver** | rich_text, hidden | **read + write — worker-owned** |
@@ -229,6 +229,12 @@ The approver DM is recorded only when it lands, like the channel notice. The
 approval DM deliberately is **not** part of that gate: if a failed DM blocked
 the record, the channel notice would repeat on every run. A missed one is
 logged instead.
+
+A row that is Approved or Scheduled but has no usable dates gets a different
+notice saying so, ending in `*ACTION:* Add the dates.` It records
+`Approved:blocked` rather than `Approved`, which is what lets the real approval
+notice still fire once the dates are filled in — that edit changes no `Status`,
+so a plain status key would have gone silent.
 
 `Notified Status` is recorded **only when the post actually lands**. Recording it regardless loses
 the message for good, because the next run then sees no change and stays quiet forever — which is

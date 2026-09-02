@@ -120,9 +120,9 @@ worker.tool("checkOooSetup", {
               .filter((n) => !statusOptionNames(properties[Ooo.STATUS]).includes(n)),
           },
           type: {
-            expected: [RequestType.PTO, RequestType.TRAVEL],
+            expected: [RequestType.PTO, RequestType.UNPAID, RequestType.TRAVEL],
             actual: selectOptionNames(properties[Ooo.TYPE]),
-            missing: [RequestType.PTO, RequestType.TRAVEL].filter(
+            missing: [RequestType.PTO, RequestType.UNPAID, RequestType.TRAVEL].filter(
               (n) => !selectOptionNames(properties[Ooo.TYPE]).includes(n),
             ),
           },
