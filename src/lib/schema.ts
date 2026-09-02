@@ -50,6 +50,13 @@ export const Ooo = {
    * changes nothing on the calendar and would leave no other trace.
    */
   NOTIFIED_STATUS: "Notified Status",
+  /**
+   * rich_text, hidden. Worker-owned: the Notion user id of the approver we
+   * last DM'd. `Notified Status` only tracks the status, so without this a
+   * change of approver — which moves no status — would leave no trace and
+   * either never notify or notify on every sweep.
+   */
+  NOTIFIED_APPROVER: "Notified Approver",
   /** created_by — the Notion user who submitted. Carries a verified email. */
   CREATED_BY: "Created by",
 } as const;

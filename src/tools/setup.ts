@@ -60,6 +60,7 @@ const EXPECTED: ReadonlyArray<{ name: string; type: string; required: boolean }>
   { name: Ooo.STATUS, type: "status", required: true },
   { name: Ooo.O365_EVENT_ID, type: "rich_text", required: true },
   { name: Ooo.NOTIFIED_STATUS, type: "rich_text", required: true },
+  { name: Ooo.NOTIFIED_APPROVER, type: "rich_text", required: true },
   { name: Ooo.CREATED_BY, type: "created_by", required: false },
   // Read for the event body only; absence degrades the body, not the sync.
   { name: Ooo.APPROVER, type: "people", required: false },

@@ -23,16 +23,24 @@ interface Harness {
   cleared: string[];
   titles: Array<{ pageId: string; title: string }>;
   statuses: Array<{ pageId: string; status: string }>;
+  dms: Array<{ email: string; text: string }>;
+  approversNotified: Array<{ pageId: string; approverId: string }>;
   announced: string[];
   notified: Array<{ pageId: string; status: string }>;
   notices: string[];
 }
 
 function harness(
-  opts: { missingEventIds?: string[]; dryRun?: boolean; newEventId?: string; slackRejects?: boolean } = {},
+  opts: {
+    missingEventIds?: string[];
+    dryRun?: boolean;
+    newEventId?: string;
+    slackRejects?: boolean;
+    dmRejects?: boolean;
+  } = {},
 ): Harness {
   const missing = new Set(opts.missingEventIds ?? []);
-  const h: Partial<Harness> = { created: [], updated: [], deleted: [], stored: [], cleared: [], titles: [], statuses: [], announced: [], notified: [], notices: [] };
+  const h: Partial<Harness> = { created: [], updated: [], deleted: [], stored: [], cleared: [], titles: [], statuses: [], dms: [], approversNotified: [], announced: [], notified: [], notices: [] };
   h.deps = {
     createEvent: async (request) => {
       h.created!.push(request);
@@ -65,6 +73,14 @@ function harness(
     setStatus: async (pageId, status) => {
       h.statuses!.push({ pageId, status });
     },
+    dm: async (email, text) => {
+      h.dms!.push({ email, text });
+      return opts.dmRejects !== true;
+    },
+    setNotifiedApprover: async (pageId, approverId) => {
+      h.approversNotified!.push({ pageId, approverId });
+    },
+    processUrl: "https://process.example/time-off",
     isNotFound: (err) => err instanceof NotFound,
     notify: async (text) => {
       h.notices!.push(text);
@@ -85,6 +101,9 @@ function request(over: Partial<OooRequest> = {}): OooRequest {
     hasIdentity: true,
     personEmail: "andon.keller@bluelabellabs.com",
     approverName: null,
+    approverId: null,
+    approverEmail: null,
+    notifiedApprover: null,
     notes: null,
     type: "Paid Time Off",
     startDate: "2026-09-07",
@@ -393,4 +412,82 @@ test("dry run promotes nothing", async () => {
   const h = harness({ dryRun: true });
   await reconcile(request({ type: "Work Related Travel", status: "Pending" }), h.deps);
   assert.deepEqual(h.statuses, []);
+});
+
+// --- direct messages ---
+
+const WITH_APPROVER = { approverId: "u-danny", approverEmail: "danny@bluelabellabs.com" };
+
+test("assigning an approver DMs them, with the process link", async () => {
+  const h = harness();
+  await reconcile(request({ ...WITH_APPROVER, status: "Pending", notifiedStatus: "Pending" }), h.deps);
+  assert.equal(h.dms.length, 1);
+  assert.equal(h.dms[0]!.email, "danny@bluelabellabs.com");
+  assert.match(h.dms[0]!.text, /\*Andon\* has requested time off/);
+  assert.match(h.dms[0]!.text, /\*ACTION:\*/);
+  assert.match(h.dms[0]!.text, /https:\/\/process\.example\/time-off\|Requesting time off/);
+  assert.deepEqual(h.approversNotified, [{ pageId: "page-1", approverId: "u-danny" }]);
+});
+
+test("the same approver is never asked twice", async () => {
+  const h = harness();
+  await reconcile(
+    request({ ...WITH_APPROVER, notifiedApprover: "u-danny", status: "Pending", notifiedStatus: "Pending" }),
+    h.deps,
+  );
+  assert.deepEqual(h.dms, []);
+});
+
+test("a changed approver IS asked", async () => {
+  const h = harness();
+  await reconcile(
+    request({ ...WITH_APPROVER, notifiedApprover: "u-someone-else", status: "Pending", notifiedStatus: "Pending" }),
+    h.deps,
+  );
+  assert.equal(h.dms.length, 1);
+});
+
+test("nobody is asked to review a row that is already decided", async () => {
+  for (const status of ["Approved", "Scheduled", "Denied"]) {
+    const h = harness();
+    await reconcile(request({ ...WITH_APPROVER, status, notifiedStatus: status }), h.deps);
+    assert.deepEqual(h.dms, [], `status=${status}`);
+  }
+});
+
+test("a rejected approver DM is not recorded, so it retries", async () => {
+  const h = harness({ dmRejects: true });
+  await reconcile(request({ ...WITH_APPROVER, status: "Pending", notifiedStatus: "Pending" }), h.deps);
+  assert.equal(h.dms.length, 1, "it tried");
+  assert.deepEqual(h.approversNotified, [], "but did NOT mark the approver asked");
+});
+
+test("approval DMs the person taking the time off", async () => {
+  const h = harness();
+  await reconcile(request({ status: "Approved", notifiedStatus: "Pending", type: "Paid Time Off" }), h.deps);
+  const personal = h.dms.find((d) => d.email === "andon.keller@bluelabellabs.com");
+  assert.match(personal!.text, /Your Sep 7–11 Paid Time Off is approved!/);
+  assert.match(personal!.text, /Added to the `Out of Office` calendar in Outlook/);
+});
+
+test("SCHEDULED travel does not tell anyone they were approved", async () => {
+  // Nobody approved it, so saying so would be a small lie.
+  const h = harness();
+  await reconcile(
+    request({ status: "Scheduled", notifiedStatus: "Pending", type: "Work Related Travel" }),
+    h.deps,
+  );
+  assert.deepEqual(h.dms.filter((d) => /approved/i.test(d.text)), []);
+});
+
+test("a failed approval DM does not block the channel record, or it would repeat forever", async () => {
+  const h = harness({ dmRejects: true });
+  await reconcile(request({ status: "Approved", notifiedStatus: "Pending" }), h.deps);
+  assert.deepEqual(h.notified, [{ pageId: "page-1", status: "Approved" }]);
+});
+
+test("dry run sends no DMs", async () => {
+  const h = harness({ dryRun: true });
+  await reconcile(request({ ...WITH_APPROVER, status: "Pending", notifiedStatus: "Pending" }), h.deps);
+  assert.deepEqual(h.dms, []);
 });

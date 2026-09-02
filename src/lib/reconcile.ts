@@ -11,7 +11,7 @@
 
 import { autoApproves, isApproved, blockedReason, eventSubject, type OooRequest } from "./oooRequest.js";
 import { ApprovalStatus } from "./schema.js";
-import { announcementFor } from "./announce.js";
+import { announcementFor, approvedDm, approverRequestDm } from "./announce.js";
 
 export interface ReconcileDeps {
   createEvent: (request: OooRequest) => Promise<{ id: string }>;
@@ -30,6 +30,12 @@ export interface ReconcileDeps {
   setNotifiedStatus: (pageId: string, status: string) => Promise<void>;
   /** Moves a row's `Status`. Used only to auto-approve Work Related Travel. */
   setStatus: (pageId: string, status: string) => Promise<void>;
+  /** DMs one person by account email. Returns whether it landed. */
+  dm: (email: string, text: string) => Promise<boolean>;
+  /** Records the approver just DM'd, so they are not asked twice. */
+  setNotifiedApprover: (pageId: string, approverId: string) => Promise<void>;
+  /** The team's time-off process page, linked from the approver's DM. */
+  processUrl: string;
   /** True when the error from updateEvent/deleteEvent means "no such event". */
   isNotFound: (err: unknown) => boolean;
   /** Best-effort operational notice. Never throws into the reconciler. */
@@ -85,7 +91,29 @@ export async function reconcile(input: OooRequest, deps: ReconcileDeps): Promise
 
   const result = await reconcileCalendar(request, deps);
   await announceIfChanged(request, deps);
+  await dmApproverIfChanged(request, deps);
   return result;
+}
+
+/**
+ * Asks a newly assigned approver to review the row.
+ *
+ * Recorded only when the DM lands, for the same reason the channel notice is:
+ * marking it sent regardless loses the request for good, and an approver who
+ * is never asked is a request that sits forever.
+ */
+async function dmApproverIfChanged(request: OooRequest, deps: ReconcileDeps): Promise<void> {
+  const message = approverRequestDm(request, deps.processUrl);
+  if (!message || deps.dryRun || request.inTrash) return;
+  try {
+    if (!(await deps.dm(message.email, message.text))) {
+      console.warn(`[reconcile] couldn't DM the approver for ${request.pageId}; leaving it to retry`);
+      return;
+    }
+    await deps.setNotifiedApprover(request.pageId, request.approverId!);
+  } catch (err) {
+    console.error(`[reconcile] approver DM failed for ${request.pageId}:`, err);
+  }
 }
 
 /**
@@ -109,6 +137,14 @@ async function announceIfChanged(request: OooRequest, deps: ReconcileDeps): Prom
     if (!posted) {
       console.warn(`[reconcile] Slack rejected the notice for ${request.pageId}; leaving it to retry`);
       return;
+    }
+    // Tell the person their time off was approved. Best-effort and deliberately
+    // NOT part of the gate: if this failed and blocked the record, the channel
+    // notice would repeat on every run. A missed DM is logged instead.
+    const personal = approvedDm(request);
+    if (personal) {
+      const sent = await deps.dm(personal.email, personal.text);
+      if (!sent) console.warn(`[reconcile] couldn't DM ${personal.email} about ${request.pageId}`);
     }
     await deps.setNotifiedStatus(request.pageId, announcement.status);
   } catch (err) {

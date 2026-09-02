@@ -19,6 +19,10 @@ export interface OooRequest {
   calendarName: string;
   personEmail: string | null;
   approverName: string | null;
+  /** The approver's Notion user id, for deduping the "please review" DM. */
+  approverId: string | null;
+  /** The approver's account email, for the Slack lookup. Null for a guest. */
+  approverEmail: string | null;
   /** Free text from the row's Notes column. Stays in Notion. */
   notes: string | null;
   /** `Type`, or null when unset. */
@@ -35,6 +39,8 @@ export interface OooRequest {
   currentTitle: string | null;
   /** The `Status` value the worker last announced in Slack, or null. */
   notifiedStatus: string | null;
+  /** The approver the worker last DM'd, or null. */
+  notifiedApprover: string | null;
   /**
    * Whether we resolved a real person (BlueLabeler or an email). False means
    * the name came from the row title, and writing a computed title back would
@@ -153,6 +159,7 @@ export function toOooRequest(page: NotionPage, disambiguate: readonly string[] =
   const picked = readPeople(page, Ooo.BLUELABELER)[0] ?? null;
   const notionName = picked?.name?.trim() ? capitalizeFirst(picked.name.trim()) : null;
   const email = readString(page, Ooo.EMAIL) ?? picked?.email ?? null;
+  const approver = readPeople(page, Ooo.APPROVER)[0] ?? null;
   const rawTitle = readString(page, Ooo.TITLE);
   // The worker writes the title back, so strip its own marker before using the
   // title as a name fallback — otherwise each pass would append another one.
@@ -174,7 +181,9 @@ export function toOooRequest(page: NotionPage, disambiguate: readonly string[] =
     personName,
     calendarName: calendarNameFor(notionName, email, title ?? personName, disambiguate),
     personEmail: email,
-    approverName: readPeople(page, Ooo.APPROVER)[0]?.name ?? null,
+    approverName: approver?.name ?? null,
+    approverId: approver?.id ?? null,
+    approverEmail: approver?.email ?? null,
     notes: readString(page, Ooo.NOTES),
     type: readString(page, Ooo.TYPE),
     startDate,
@@ -182,6 +191,7 @@ export function toOooRequest(page: NotionPage, disambiguate: readonly string[] =
     status: readString(page, Ooo.STATUS),
     eventId: readString(page, Ooo.O365_EVENT_ID),
     notifiedStatus: readString(page, Ooo.NOTIFIED_STATUS),
+    notifiedApprover: readString(page, Ooo.NOTIFIED_APPROVER),
     currentTitle: rawTitle,
     hasIdentity: Boolean(notionName ?? email),
     inTrash: page.inTrash,

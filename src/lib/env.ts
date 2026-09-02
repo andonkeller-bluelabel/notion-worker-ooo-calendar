@@ -103,3 +103,11 @@ export const opsChannel = () => process.env.OOO_OPS_CHANNEL ?? "";
 export const notifyChannel = () => process.env.OOO_NOTIFY_CHANNEL || opsChannel();
 /** Link to the OOO Entries database, so ops alerts are actionable. */
 export const oooDatabaseUrl = () => process.env.OOO_DATABASE_URL ?? "";
+
+/**
+ * The team's time-off process page, linked from the approver's "please review"
+ * DM so the action and the instructions arrive together.
+ */
+export const processUrl = () =>
+  process.env.OOO_PROCESS_URL ??
+  "https://app.notion.com/p/bluelabellabs/Managing-your-time-off-OOO-9184eecdf9f746649c410e2d07d726fc";

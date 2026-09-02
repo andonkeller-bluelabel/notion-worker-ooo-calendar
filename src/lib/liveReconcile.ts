@@ -23,8 +23,8 @@ import { toOooRequest, type OooRequest } from "./oooRequest.js";
 import { reconcile, type ReconcileDeps, type ReconcileResult } from "./reconcile.js";
 import { createEvent, deleteEvent, updateEvent } from "./graphCalendar.js";
 import { isNotFound } from "./errors.js";
-import { disambiguateFirstNames, isDryRun, notifyChannel } from "./env.js";
-import { notifyOps, postSlackMessage } from "./slack.js";
+import { disambiguateFirstNames, isDryRun, notifyChannel, processUrl } from "./env.js";
+import { dmByEmail, notifyOps, postSlackMessage } from "./slack.js";
 
 export interface LiveOptions {
   /**
@@ -47,6 +47,10 @@ export function liveDeps(notion: Notion, options: LiveOptions = {}): ReconcileDe
     setNotifiedStatus: (pageId, status) =>
       updateProps(notion, pageId, { [Ooo.NOTIFIED_STATUS]: P.richText(status) }),
     setStatus: (pageId, status) => updateProps(notion, pageId, { [Ooo.STATUS]: { status: { name: status } } }),
+    dm: dmByEmail,
+    setNotifiedApprover: (pageId, approverId) =>
+      updateProps(notion, pageId, { [Ooo.NOTIFIED_APPROVER]: P.richText(approverId) }),
+    processUrl: processUrl(),
     isNotFound,
     notify: options.quiet ? undefined : notifyOps,
     dryRun: isDryRun(),

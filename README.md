@@ -130,6 +130,7 @@ property. The worker reads every column and writes exactly one.
 | Type | select — Paid Time Off, Work Related Travel | read (**Travel auto-approves**) |
 | **O365 Event ID** | rich_text, hidden | **read + write — worker-owned** |
 | **Notified Status** | rich_text, hidden | **read + write — worker-owned** |
+| **Notified Approver** | rich_text, hidden | **read + write — worker-owned** |
 | Created by | created_by | read (carries a verified email) |
 
 The worker rewrites `Title` to match the calendar subject (`✈️ <name>`) on every reconcile, whatever
@@ -205,6 +206,24 @@ If the row has `Notes`, they are appended as a second line, `Note: …`, escaped
 and trimmed at 300 characters. They stay off the calendar event (see above);
 Slack is a narrower audience, but it is still a broadcast to everyone in the
 channel.
+
+### Direct messages
+
+Two notices go to a person rather than the channel, resolved from their account
+email through `users.lookupByEmail`:
+
+- **A newly assigned approver** is asked to review, with a link to the team's
+  time-off process (`OOO_PROCESS_URL`). Deduped against `Notified Approver`,
+  because changing the approver moves no status and would otherwise leave no
+  trace at all. Silent once a row is decided: asking someone to review a settled
+  row wastes their time.
+- **The requester**, when their time off is **Approved**. Not on `Scheduled` —
+  nobody approved travel, so saying it was approved would be a small lie.
+
+The approver DM is recorded only when it lands, like the channel notice. The
+approval DM deliberately is **not** part of that gate: if a failed DM blocked
+the record, the channel notice would repeat on every run. A missed one is
+logged instead.
 
 `Notified Status` is recorded **only when the post actually lands**. Recording it regardless loses
 the message for good, because the next run then sees no change and stays quiet forever — which is

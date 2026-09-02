@@ -8,7 +8,7 @@
  * makes `Requested → Denied` announceable, since it moves no event.
  */
 
-import { ApprovalStatus, RequestType } from "./schema.js";
+import { ApprovalStatus, CALENDAR_STATUSES, RequestType } from "./schema.js";
 import type { OooRequest } from "./oooRequest.js";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -121,4 +121,61 @@ function buildAnnouncement(request: OooRequest, hadEvent: boolean): Announcement
       // An unrecognized status option. Record it so we don't loop, say nothing.
       return { status, text: "" };
   }
+}
+
+
+/** A direct message to one person. */
+export interface DirectMessage {
+  /** Account email to resolve to a Slack user. */
+  email: string;
+  text: string;
+}
+
+/**
+ * The "please review this" DM to a newly assigned approver, or null.
+ *
+ * Fires when the approver CHANGES, which no status transition accompanies —
+ * hence its own marker rather than riding on `Notified Status`.
+ *
+ * Silent once a row is decided: assigning an approver to something already
+ * approved, scheduled or denied is bookkeeping, not a request for action, and
+ * asking someone to review a settled row wastes their time.
+ */
+export function approverRequestDm(request: OooRequest, processUrl: string): DirectMessage | null {
+  const { approverId, approverEmail, status, notifiedApprover } = request;
+  if (!approverId || !approverEmail) return null;
+  if (approverId === notifiedApprover) return null;
+  if (status === ApprovalStatus.DENIED || CALENDAR_STATUSES.includes(status ?? "")) return null;
+
+  const when =
+    request.startDate && request.endDate ? formatRange(request.startDate, request.endDate) : "dates not set";
+  return {
+    email: approverEmail,
+    text:
+      `*${request.calendarName}* has requested time off, ${when}. ${link("details", request.pageUrl)}` +
+      noteLine(request.notes) +
+      `\n\n*ACTION:*\nFollow our time-off process: ${link("Requesting time off", processUrl)}`,
+  };
+}
+
+/**
+ * The "you're approved" DM to the person taking the time off, or null.
+ *
+ * Only on APPROVED. Scheduled travel is not approved by anyone, so telling
+ * someone their travel was approved would be a small lie.
+ */
+export function approvedDm(request: OooRequest): DirectMessage | null {
+  if (request.status !== ApprovalStatus.APPROVED) return null;
+  if (request.status === request.notifiedStatus) return null;
+  if (!request.personEmail || request.inTrash) return null;
+
+  const when =
+    request.startDate && request.endDate ? formatRange(request.startDate, request.endDate) : "your time off";
+  const kind = request.type ?? "time off";
+  return {
+    email: request.personEmail,
+    text:
+      `Your ${when} ${kind} is approved! :penguin_dance:\n` +
+      ":calendar: Added to the `Out of Office` calendar in Outlook.",
+  };
 }
