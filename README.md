@@ -203,7 +203,10 @@ minutes or miss transitions entirely.
 Announcing happens AFTER the calendar work, so a message never claims something that failed.
 
 If the row has `Notes`, they are appended as a second line, `Note: …`, escaped
-and trimmed at 300 characters. They stay off the calendar event (see above);
+and trimmed at 300 characters. If no approver is assigned and the row is still
+undecided, the message ends with `*ACTION:* Assign an approver.` — the Flex form
+is public and cannot pre-assign one, so every request through it arrives
+unassigned, and without the nudge nobody would know to pick it up. They stay off the calendar event (see above);
 Slack is a narrower audience, but it is still a broadcast to everyone in the
 channel.
 

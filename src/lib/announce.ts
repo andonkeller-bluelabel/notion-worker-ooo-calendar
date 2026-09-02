@@ -41,6 +41,23 @@ function link(label: string, url: string): string {
 const MAX_NOTE = 300;
 
 /**
+ * The nudge for a row nobody can act on yet, or "".
+ *
+ * The Flex form is public, so it cannot pre-assign an approver — every request
+ * through it arrives unassigned. Without this the channel notice would report a
+ * request and give no one a reason to pick it up, and the approver DM cannot
+ * fire because there is nobody to send it to.
+ *
+ * Only while the row is still undecided. An approved or denied row needs no
+ * approver assigned after the fact.
+ */
+function actionLine(request: OooRequest): string {
+  const decided = request.status === ApprovalStatus.DENIED || CALENDAR_STATUSES.includes(request.status ?? "");
+  if (decided || request.approverId) return "";
+  return "\n\n*ACTION:* Assign an approver.";
+}
+
+/**
  * The row's Notes, as a second line, or "" when there are none.
  *
  * Deliberately NOT on the calendar event — see graphCalendar.ts. Slack is a
@@ -74,10 +91,10 @@ export interface Announcement {
  */
 export function announcementFor(request: OooRequest, hadEvent: boolean): Announcement | null {
   const announcement = buildAnnouncement(request, hadEvent);
-  // Append the note to whatever the status produced, so every message carries
-  // it rather than only the submission one.
+  // Append the note, then any outstanding action, to whatever the status
+  // produced — so every message carries them, not only the submission one.
   if (!announcement || !announcement.text) return announcement;
-  return { ...announcement, text: announcement.text + noteLine(request.notes) };
+  return { ...announcement, text: announcement.text + noteLine(request.notes) + actionLine(request) };
 }
 
 function buildAnnouncement(request: OooRequest, hadEvent: boolean): Announcement | null {

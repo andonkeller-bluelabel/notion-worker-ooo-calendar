@@ -109,7 +109,7 @@ test("travel that is stopped reads as cancelled, not denied", () => {
 // --- the note line ---
 
 test("a note is appended on its own line, under the message", () => {
-  const a = announcementFor(request({ notes: "Back online Monday" }), false);
+  const a = announcementFor(request({ notes: "Back online Monday", approverId: "u-danny" }), false);
   assert.match(a!.text, /requested time off, Sep 10–14\. <[^>]+>\nNote: Back online Monday$/);
 });
 
@@ -126,13 +126,39 @@ test("the note rides along on every status, not just the submission", () => {
 });
 
 test("a note cannot inject Slack markup", () => {
-  const a = announcementFor(request({ notes: "<!channel> & <https://evil|click>" }), false);
+  const a = announcementFor(request({ notes: "<!channel> & <https://evil|click>", approverId: "u-danny" }), false);
   assert.match(a!.text, /Note: &lt;!channel&gt; &amp; &lt;https:\/\/evil\|click&gt;$/);
 });
 
 test("a very long note is trimmed rather than flooding the channel", () => {
-  const a = announcementFor(request({ notes: "x".repeat(500) }), false);
+  const a = announcementFor(request({ notes: "x".repeat(500), approverId: "u-danny" }), false);
   const note = a!.text.split("\nNote: ")[1]!;
   assert.equal(note.length, 300);
   assert.ok(note.endsWith("…"));
+});
+
+// --- nudging someone to pick up an unassigned request ---
+
+test("an unassigned request asks the channel to assign an approver", () => {
+  // The Flex form is public and cannot pre-assign one, so every request through
+  // it arrives this way and nobody would otherwise know to pick it up.
+  const a = announcementFor(request({ approverId: null }), false);
+  assert.match(a!.text, /\n\n\*ACTION:\* Assign an approver\.$/);
+});
+
+test("an assigned request does not ask again", () => {
+  const a = announcementFor(request({ approverId: "u-danny" }), false);
+  assert.doesNotMatch(a!.text, /Assign an approver/);
+});
+
+test("a decided row is never asked for an approver after the fact", () => {
+  for (const status of ["Approved", "Scheduled", "Denied"]) {
+    const a = announcementFor(request({ status, notifiedStatus: "Pending", approverId: null }), false);
+    assert.doesNotMatch(a!.text, /Assign an approver/, `status=${status}`);
+  }
+});
+
+test("the note comes first, then the action", () => {
+  const a = announcementFor(request({ approverId: null, notes: "context" }), false);
+  assert.match(a!.text, /\nNote: context\n\n\*ACTION:\* Assign an approver\.$/);
 });
