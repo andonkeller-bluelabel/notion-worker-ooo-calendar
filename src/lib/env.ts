@@ -42,6 +42,11 @@ export const o365CalendarMailbox = () => requireEnv("O365_CALENDAR_MAILBOX");
 // --- Notion ---
 /** Data source id of the (native, user-owned) "OOO Entries" database. */
 export const oooDataSourceId = () => requireEnv("OOO_DATA_SOURCE_ID");
+/** Data source id of "BlueLabel US Holidays" (read-only mirror source). */
+export const usHolidaysDataSourceId = () => process.env.US_HOLIDAYS_DATA_SOURCE_ID ?? "";
+/** Data source id of "Vendor Partner Holidays" (read-only mirror source). */
+export const vendorHolidaysDataSourceId = () => process.env.VENDOR_HOLIDAYS_DATA_SOURCE_ID ?? "";
+
 /** Only the sweep needs this — webhooks get `context.notion` from the platform. */
 export const notionApiToken = () => requireEnv("NOTION_API_TOKEN");
 

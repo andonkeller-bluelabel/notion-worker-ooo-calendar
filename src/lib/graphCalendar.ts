@@ -29,6 +29,17 @@ import { normalizeId } from "./notion.js";
  */
 export const NOTION_PAGE_ID_PROP = "String {c9c8e1a2-6f5b-4a3d-9e2f-7b1d0a4c8e35} Name NotionPageId";
 
+/**
+ * The same idea for mirrored holidays, under a DELIBERATELY DIFFERENT name.
+ *
+ * This is not cosmetic. The OOO sweep deletes any event carrying
+ * NOTION_PAGE_ID_PROP whose Notion row is not Approved, and a holiday row has
+ * no `Status` at all — so sharing one tag would make the OOO sweep wipe every
+ * holiday on its next run. Separate tags keep each lane blind to the others',
+ * and both are blind to events a human created by hand.
+ */
+export const HOLIDAY_PAGE_ID_PROP = "String {c9c8e1a2-6f5b-4a3d-9e2f-7b1d0a4c8e35} Name HolidayPageId";
+
 export interface GraphEvent {
   id: string;
   subject?: string;
@@ -99,6 +110,58 @@ export function buildEventPayload(request: OooRequest): Record<string, unknown> 
   };
 }
 
+/**
+ * A mirrored holiday. Same all-day, free, attendee-less shape as a time-off
+ * entry — it is a fact about a day, not an invitation — but tagged into the
+ * holiday lane and linked back to its own Notion row.
+ */
+export function buildHolidayPayload(entry: {
+  pageId: string;
+  subject: string;
+  startDate: string;
+  endDate: string;
+  pageUrl: string;
+}): Record<string, unknown> {
+  const range = allDayRange(entry.startDate, entry.endDate);
+  const tz = oooTimezone();
+  return {
+    subject: entry.subject,
+    isAllDay: true,
+    start: { dateTime: range.start, timeZone: tz },
+    end: { dateTime: range.end, timeZone: tz },
+    showAs: "free",
+    isReminderOn: false,
+    attendees: [],
+    body: {
+      contentType: "HTML",
+      content:
+        `<p>Holiday, mirrored from Notion.</p>` +
+        `<p><a href="${entry.pageUrl}">Open the entry</a></p>` +
+        `<p><i>Managed by notion-worker-ooo-calendar. Edits made here are overwritten from Notion.</i></p>`,
+    },
+    singleValueExtendedProperties: [{ id: HOLIDAY_PAGE_ID_PROP, value: entry.pageId }],
+  };
+}
+
+export function createHolidayEvent(entry: Parameters<typeof buildHolidayPayload>[0]): Promise<GraphEvent> {
+  return graphRequest<GraphEvent>(eventsPath(), { method: "POST", body: buildHolidayPayload(entry) });
+}
+
+export function updateHolidayEvent(
+  eventId: string,
+  entry: Parameters<typeof buildHolidayPayload>[0],
+): Promise<GraphEvent> {
+  return graphRequest<GraphEvent>(`${eventsPath()}/${encodeURIComponent(eventId)}`, {
+    method: "PATCH",
+    body: buildHolidayPayload(entry),
+  });
+}
+
+/** Every mirrored HOLIDAY event in the window, paired with its Notion page id. */
+export async function listHolidayEvents(startIso: string, endIso: string): Promise<TaggedEvent[]> {
+  return listTagged(startIso, endIso, HOLIDAY_PAGE_ID_PROP);
+}
+
 export async function createEvent(request: OooRequest): Promise<GraphEvent> {
   return graphRequest<GraphEvent>(eventsPath(), { method: "POST", body: buildEventPayload(request) });
 }
@@ -159,13 +222,18 @@ export interface TaggedEvent {
  * only costs extra rows to filter, never a wrong deletion.
  */
 export async function listWorkerEvents(startIso: string, endIso: string): Promise<TaggedEvent[]> {
+  return listTagged(startIso, endIso, NOTION_PAGE_ID_PROP);
+}
+
+/** Shared listing for one lane's tag. Events without THAT tag are skipped. */
+async function listTagged(startIso: string, endIso: string, tag: string): Promise<TaggedEvent[]> {
   const found: TaggedEvent[] = [];
   let path: string | null = calendarPath("calendarView");
   let query: Record<string, string> | undefined = {
     startDateTime: startIso,
     endDateTime: endIso,
     $select: "id,subject,start,end,body,isAllDay,showAs",
-    $expand: `singleValueExtendedProperties($filter=id eq '${NOTION_PAGE_ID_PROP}')`,
+    $expand: `singleValueExtendedProperties($filter=id eq '${tag}')`,
     $top: "100",
   };
 
@@ -175,8 +243,10 @@ export async function listWorkerEvents(startIso: string, endIso: string): Promis
       headers: { Prefer: `outlook.timezone="${oooTimezone()}"` },
     });
     for (const event of page.value ?? []) {
-      const pageId = notionPageIdOf(event);
-      // Untagged events belong to humans. Never touch them.
+      // Read the tag we asked to expand. An event in another lane, or one a
+      // human created, has no value here and is skipped.
+      const raw = (event.singleValueExtendedProperties ?? []).find((p) => p.id === tag)?.value;
+      const pageId = raw?.trim() ? normalizeId(raw.trim()) : tag === NOTION_PAGE_ID_PROP ? notionPageIdOf(event) : null;
       if (pageId && event.id) found.push({ pageId, event });
     }
     path = page["@odata.nextLink"] ?? null;

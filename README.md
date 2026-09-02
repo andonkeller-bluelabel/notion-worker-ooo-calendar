@@ -87,6 +87,31 @@ calendar by hand is safe.
 - The `ntn` CLI and **Node 22** (`nvm use`).
 - An internal Notion integration with access to that database (its token → `NOTION_API_TOKEN`).
 
+## Three databases, one calendar
+
+The shared calendar is fed by three Notion databases, each in its own lane:
+
+| Source | Kind | Cadence | Event prefix |
+|---|---|---|---|
+| **OOO Entries** | a request workflow — submitted, approved, status moves | webhook + 10m sweep | `✈️` |
+| **BlueLabel US Holidays** | reference data | 6h | `🇺🇸` |
+| **Vendor Partner Holidays** | reference data | 6h | `🏢` |
+
+Holidays never enter OOO Entries. A public holiday has no requester, no
+approver, and no status anyone set; putting one there would mean inventing all
+three. The calendar is where the three meet, because a calendar is exactly
+"things happening on days, from wherever".
+
+Each lane tags its events with its **own** extended property and only ever
+touches events carrying that tag. This is load-bearing, not tidiness: the OOO
+sweep deletes any event with ITS tag whose row is not Approved, and a holiday
+row has no `Status`, so a shared tag would make the OOO sweep wipe every
+mirrored holiday on its next run. Events a person created by hand carry no tag
+and are invisible to all three lanes.
+
+Sources fail independently. On the holiday sync's first run the vendor database
+had a renamed date property and errored; US holidays synced anyway.
+
 ## Notion database
 
 **OOO Entries** (Team Ops → More) is user-owned and native. Requests arrive through its

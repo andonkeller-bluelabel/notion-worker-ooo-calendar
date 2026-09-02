@@ -122,3 +122,32 @@ export const SourceForm = {
   CORE: "Core",
   FLEX: "Flex",
 } as const;
+
+/**
+ * The two holiday databases the worker mirrors onto the shared calendar.
+ *
+ * These rows are not requests — nobody submits or approves a public holiday —
+ * so they never enter OOO Entries. Each gets the same worker-owned
+ * `O365 Event ID` column that OOO Entries has, so the pattern is identical and
+ * the id is visible when something needs debugging.
+ */
+export const UsHolidays = {
+  TITLE: "Holiday",
+  DATE: "Date",
+  O365_EVENT_ID: "O365 Event ID",
+} as const;
+
+export const VendorHolidays = {
+  TITLE: "Name",
+  DATE: "Date",
+  /**
+   * select — which partner. Currently empty on every row; the vendor is in the
+   * title instead ("Tatvasoft: Diwali"), which is why nothing reads this yet.
+   */
+  PARTNER: "Partner",
+  O365_EVENT_ID: "O365 Event ID",
+} as const;
+
+/** Prefixes that make the three kinds of entry readable at a glance. */
+export const US_HOLIDAY_MARKER = "🇺🇸";
+export const VENDOR_HOLIDAY_MARKER = "🏢";

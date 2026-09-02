@@ -27,7 +27,7 @@ import { o365CalendarMailbox, oooDataSourceId, sweepLookaheadDays, sweepLookback
 import { ApprovalStatus, Ooo, RequestType } from "../lib/schema.js";
 import { P, readString, retrievePage, updateProps } from "../lib/notion.js";
 import { reconcilePage } from "../lib/liveReconcile.js";
-import { listAllEvents, listWorkerEvents, notionPageIdOf } from "../lib/graphCalendar.js";
+import { listAllEvents, listHolidayEvents, listWorkerEvents, notionPageIdOf } from "../lib/graphCalendar.js";
 import { addDays, toDateOnly } from "../lib/oooRequest.js";
 
 /**
@@ -213,6 +213,27 @@ worker.tool("checkOooSetup", {
         };
       } catch (err) {
         report.workerEvents = { ok: false, message: err instanceof Error ? err.message : String(err) };
+      }
+
+      // The other lane. Counted separately to prove the two never overlap: an
+      // event carrying both tags, or one lane seeing the other's events, would
+      // mean a sweep could delete work it does not own.
+      try {
+        const today = new Date().toISOString().slice(0, 10);
+        const back = lookbackDays && lookbackDays > 0 ? Math.floor(lookbackDays) : sweepLookbackDays();
+        const ahead = lookaheadDays && lookaheadDays > 0 ? Math.floor(lookaheadDays) : sweepLookaheadDays();
+        const holidays = await listHolidayEvents(`${addDays(today, -back)}T00:00:00`, `${addDays(today, ahead)}T00:00:00`);
+        const oooIds = new Set(
+          ((report.workerEvents as { events?: Array<{ eventId?: string }> })?.events ?? []).map((e) => e.eventId),
+        );
+        report.holidayEvents = {
+          ok: true,
+          count: holidays.length,
+          overlapWithTimeOff: holidays.filter((h) => oooIds.has(h.event.id)).length,
+          sample: holidays.slice(0, 5).map(({ event }) => event.subject ?? null),
+        };
+      } catch (err) {
+        report.holidayEvents = { ok: false, message: err instanceof Error ? err.message : String(err) };
       }
 
       return report;
