@@ -49,7 +49,7 @@ test("formatRange adds years only when the range crosses one", () => {
 });
 
 test("a submission names the person, the dates, and links the row", () => {
-  const a = announcementFor(request(), false);
+  const a = announcementFor(request({ approverId: "u-danny" }), false);
   assert.match(a!.text, /\*Danny\* requested time off, Sep 10–14/);
   assert.match(a!.text, /<https:\/\/app\.notion\.com\/p1\|details>/);
   assert.equal(a!.status, "Requested");
@@ -143,7 +143,14 @@ test("an unassigned request asks the channel to assign an approver", () => {
   // The Flex form is public and cannot pre-assign one, so every request through
   // it arrives this way and nobody would otherwise know to pick it up.
   const a = announcementFor(request({ approverId: null }), false);
-  assert.match(a!.text, /\n\n\*ACTION:\* Assign an approver\.$/);
+  assert.match(a!.text, /\n\n\*ACTION:\* <https:\/\/app\.notion\.com\/p1\|Assign an approver\.>$/);
+});
+
+test("an unassigned message carries exactly one link, on the action", () => {
+  // Two links to the same row is noise, and the one worth clicking is the ask.
+  const a = announcementFor(request({ approverId: null }), false);
+  assert.equal((a!.text.match(/<https:\/\//g) ?? []).length, 1);
+  assert.doesNotMatch(a!.text, /\|details>/);
 });
 
 test("an assigned request does not ask again", () => {
@@ -160,5 +167,5 @@ test("a decided row is never asked for an approver after the fact", () => {
 
 test("the note comes first, then the action", () => {
   const a = announcementFor(request({ approverId: null, notes: "context" }), false);
-  assert.match(a!.text, /\nNote: context\n\n\*ACTION:\* Assign an approver\.$/);
+  assert.match(a!.text, /\nNote: context\n\n\*ACTION:\* <[^>]+\|Assign an approver\.>$/);
 });

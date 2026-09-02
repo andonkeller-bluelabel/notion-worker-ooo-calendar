@@ -54,7 +54,9 @@ const MAX_NOTE = 300;
 function actionLine(request: OooRequest): string {
   const decided = request.status === ApprovalStatus.DENIED || CALENDAR_STATUSES.includes(request.status ?? "");
   if (decided || request.approverId) return "";
-  return "\n\n*ACTION:* Assign an approver.";
+  // The link rides on the action rather than sitting separately, so the message
+  // carries exactly one link to the row and it is on the thing to click.
+  return `\n\n*ACTION:* ${link("Assign an approver.", request.pageUrl)}`;
 }
 
 /**
@@ -90,21 +92,21 @@ export interface Announcement {
  * an un-approval can mention that the entry came off the calendar.
  */
 export function announcementFor(request: OooRequest, hadEvent: boolean): Announcement | null {
-  const announcement = buildAnnouncement(request, hadEvent);
-  // Append the note, then any outstanding action, to whatever the status
-  // produced — so every message carries them, not only the submission one.
+  const action = actionLine(request);
+  // One link to the row per message. When there is an action, the link belongs
+  // on it; otherwise the message carries its own "details".
+  const announcement = buildAnnouncement(request, hadEvent, action ? "" : link("details", request.pageUrl));
   if (!announcement || !announcement.text) return announcement;
-  return { ...announcement, text: announcement.text + noteLine(request.notes) + actionLine(request) };
+  return { ...announcement, text: announcement.text.trimEnd() + noteLine(request.notes) + action };
 }
 
-function buildAnnouncement(request: OooRequest, hadEvent: boolean): Announcement | null {
+function buildAnnouncement(request: OooRequest, hadEvent: boolean, open: string): Announcement | null {
   const status = request.status;
   if (!status || request.inTrash) return null;
   if (status === request.notifiedStatus) return null;
 
   const who = `*${request.calendarName}*`;
   const when = request.startDate && request.endDate ? formatRange(request.startDate, request.endDate) : "dates not set";
-  const open = link("details", request.pageUrl);
   const firstTime = !request.notifiedStatus;
   const isTravel = request.type === RequestType.TRAVEL;
 

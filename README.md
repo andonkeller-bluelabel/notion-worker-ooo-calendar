@@ -204,9 +204,11 @@ Announcing happens AFTER the calendar work, so a message never claims something 
 
 If the row has `Notes`, they are appended as a second line, `Note: …`, escaped
 and trimmed at 300 characters. If no approver is assigned and the row is still
-undecided, the message ends with `*ACTION:* Assign an approver.` — the Flex form
-is public and cannot pre-assign one, so every request through it arrives
-unassigned, and without the nudge nobody would know to pick it up. They stay off the calendar event (see above);
+undecided, the message ends with `*ACTION:* Assign an approver.`, linked to the row — the
+Flex form is public and cannot pre-assign one, so every request through it
+arrives unassigned, and without the nudge nobody would know to pick it up. The
+link rides on the action rather than sitting separately, so each message carries
+exactly one link to the row and it is on the thing worth clicking. They stay off the calendar event (see above);
 Slack is a narrower audience, but it is still a broadcast to everyone in the
 channel.
 
