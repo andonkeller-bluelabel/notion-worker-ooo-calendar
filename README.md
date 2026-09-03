@@ -230,6 +230,15 @@ approval DM deliberately is **not** part of that gate: if a failed DM blocked
 the record, the channel notice would repeat on every run. A missed one is
 logged instead.
 
+When a row enters a calendar status, the worker also checks for **other
+approved rows for the same person covering the same days** and posts a warning
+naming both. Two overlapping rows usually mean the same absence entered twice —
+the backfill imported time off that was already on the legacy calendar, so
+anyone re-submitting an upcoming request creates a second row, and the worker
+correctly gives it its own event. It warns rather than refusing: a longer trip
+split into two rows is legitimate, so a human decides which to keep and the
+worker never silently discards a request.
+
 A row that is Approved or Scheduled but has no usable dates gets a different
 notice saying so, ending in `*ACTION:* Add the dates.` It records
 `Approved:blocked` rather than `Approved`, which is what lets the real approval

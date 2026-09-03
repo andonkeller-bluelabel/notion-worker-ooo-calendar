@@ -37,6 +37,7 @@ function harness(
     newEventId?: string;
     slackRejects?: boolean;
     dmRejects?: boolean;
+    overlaps?: Array<{ pageUrl: string; startDate: string; endDate: string }>;
   } = {},
 ): Harness {
   const missing = new Set(opts.missingEventIds ?? []);
@@ -81,6 +82,7 @@ function harness(
       h.approversNotified!.push({ pageId, approverId });
     },
     processUrl: "https://process.example/time-off",
+    findOverlaps: async () => opts.overlaps ?? [],
     isNotFound: (err) => err instanceof NotFound,
     notify: async (text) => {
       h.notices!.push(text);
@@ -490,4 +492,49 @@ test("dry run sends no DMs", async () => {
   const h = harness({ dryRun: true });
   await reconcile(request({ ...WITH_APPROVER, status: "Pending", notifiedStatus: "Pending" }), h.deps);
   assert.deepEqual(h.dms, []);
+});
+
+// --- possible duplicates ---
+
+const OTHER = [{ pageUrl: "https://app.notion.com/other", startDate: "2026-09-07", endDate: "2026-09-11" }];
+
+test("an approval that overlaps an existing entry warns the channel", async () => {
+  // The backfill imported time off already on the legacy calendar, so anyone
+  // re-submitting an upcoming request creates a second row — and a second event.
+  const h = harness({ overlaps: OTHER });
+  await reconcile(request({ status: "Approved", notifiedStatus: "Pending" }), h.deps);
+  assert.equal(h.announced.length, 2, "the approval, then the warning");
+  assert.match(h.announced[1]!, /already has another entry covering these days/);
+});
+
+test("the warning follows the notice it is warning about", async () => {
+  const h = harness({ overlaps: OTHER });
+  await reconcile(request({ status: "Approved", notifiedStatus: "Pending" }), h.deps);
+  assert.match(h.announced[0]!, /approved and on the team calendar/);
+});
+
+test("no overlap, no warning", async () => {
+  const h = harness();
+  await reconcile(request({ status: "Approved", notifiedStatus: "Pending" }), h.deps);
+  assert.equal(h.announced.length, 1);
+});
+
+test("the overlap check does not run for a row that is not on the calendar", async () => {
+  let called = false;
+  const h = harness({ overlaps: OTHER });
+  h.deps.findOverlaps = async () => {
+    called = true;
+    return OTHER;
+  };
+  await reconcile(request({ status: "Denied", notifiedStatus: "Approved", eventId: "EVT-1" }), h.deps);
+  assert.equal(called, false, "a denial cannot duplicate anything");
+});
+
+test("a failing overlap check never blocks the record", async () => {
+  const h = harness();
+  h.deps.findOverlaps = async () => {
+    throw new Error("notion is down");
+  };
+  await reconcile(request({ status: "Approved", notifiedStatus: "Pending" }), h.deps);
+  assert.deepEqual(h.notified, [{ pageId: "page-1", status: "Approved" }]);
 });

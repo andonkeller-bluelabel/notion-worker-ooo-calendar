@@ -6,10 +6,11 @@
  * so there is exactly one code path that changes the calendar.
  */
 
-import { Ooo } from "./schema.js";
+import { CALENDAR_STATUSES, Ooo } from "./schema.js";
 import {
   P,
   peopleValue,
+  queryAll,
   readCreatedBy,
   readPeople,
   readString,
@@ -19,11 +20,12 @@ import {
   type NotionPage,
 } from "./notion.js";
 import { filledName, identityFill, needsEmailLookup, type IdentityInputs } from "./identity.js";
-import { toOooRequest, type OooRequest } from "./oooRequest.js";
+import { addDays, rangesOverlap, toOooRequest, type OooRequest } from "./oooRequest.js";
 import { reconcile, type ReconcileDeps, type ReconcileResult } from "./reconcile.js";
+import type { OverlapRow } from "./announce.js";
 import { createEvent, deleteEvent, updateEvent } from "./graphCalendar.js";
 import { isNotFound } from "./errors.js";
-import { disambiguateFirstNames, isDryRun, notifyChannel, processUrl } from "./env.js";
+import { disambiguateFirstNames, isDryRun, notifyChannel, oooDataSourceId, processUrl } from "./env.js";
 import { dmByEmail, notifyOps, postSlackMessage } from "./slack.js";
 
 export interface LiveOptions {
@@ -51,6 +53,7 @@ export function liveDeps(notion: Notion, options: LiveOptions = {}): ReconcileDe
     setNotifiedApprover: (pageId, approverId) =>
       updateProps(notion, pageId, { [Ooo.NOTIFIED_APPROVER]: P.richText(approverId) }),
     processUrl: processUrl(),
+    findOverlaps: (request) => findOverlaps(notion, request),
     isNotFound,
     notify: options.quiet ? undefined : notifyOps,
     dryRun: isDryRun(),
@@ -156,6 +159,41 @@ export async function fillIdentity(notion: Notion, page: NotionPage): Promise<No
   }
   console.log(`[identity] filled ${page.id}: ${Object.keys(props).join(", ")}`);
   return { ...page, properties };
+}
+
+/**
+ * Other rows for the same person whose dates touch this one's.
+ *
+ * Queried narrowly — same email, in a calendar status, starting within a
+ * couple of months — then filtered exactly in code, because Notion's date
+ * filters compare against a range's start and cannot express "overlaps".
+ *
+ * Best-effort: a failure returns nothing, so a missed warning never blocks the
+ * calendar work.
+ */
+export async function findOverlaps(notion: Notion, request: OooRequest): Promise<OverlapRow[]> {
+  if (!request.personEmail || !request.startDate || !request.endDate) return [];
+  try {
+    const rows = await queryAll(notion, oooDataSourceId(), {
+      and: [
+        { property: Ooo.EMAIL, email: { equals: request.personEmail } },
+        { or: CALENDAR_STATUSES.map((name) => ({ property: Ooo.STATUS, status: { equals: name } })) },
+        { property: Ooo.DATES, date: { on_or_after: addDays(request.startDate, -90) } },
+      ],
+    });
+    return rows
+      .filter((row) => row.id !== request.pageId)
+      .map((row) => toOooRequest(row))
+      .filter(
+        (other): other is OooRequest & { startDate: string; endDate: string } =>
+          Boolean(other.startDate && other.endDate) &&
+          rangesOverlap(request.startDate!, request.endDate!, other.startDate!, other.endDate!),
+      )
+      .map((other) => ({ pageUrl: other.pageUrl, startDate: other.startDate, endDate: other.endDate }));
+  } catch (err) {
+    console.error(`[overlap] couldn't check ${request.pageId}:`, err);
+    return [];
+  }
 }
 
 /** Reconciles an already-loaded page. */

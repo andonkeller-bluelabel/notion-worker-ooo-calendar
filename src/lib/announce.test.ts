@@ -4,7 +4,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { announcementFor, formatRange } from "./announce.js";
+import { announcementFor, duplicateNotice, formatRange } from "./announce.js";
 import type { OooRequest } from "./oooRequest.js";
 
 function request(over: Partial<OooRequest> = {}): OooRequest {
@@ -220,4 +220,28 @@ test("Unpaid Time Off reads like leave, not travel", () => {
   const a = announcementFor(request({ status: "Approved", notifiedStatus: "Pending", type: "Unpaid Time Off" }), false);
   assert.match(a!.text, /approved and on the team calendar/);
   assert.doesNotMatch(a!.text, /work related travel/i);
+});
+
+// --- possible duplicates ---
+
+test("no overlaps means nothing is said", () => {
+  assert.equal(duplicateNotice(request(), []), null);
+});
+
+test("an overlap names the person and links the other entry", () => {
+  const n = duplicateNotice(request(), [
+    { pageUrl: "https://app.notion.com/other", startDate: "2026-09-10", endDate: "2026-09-14" },
+  ]);
+  assert.match(n!, /\*Danny\* already has another entry covering these days/);
+  assert.match(n!, /<https:\/\/app\.notion\.com\/other\|Sep 10–14>/);
+  assert.match(n!, /remove whichever is wrong/);
+});
+
+test("several overlaps read as plural and list them all", () => {
+  const n = duplicateNotice(request(), [
+    { pageUrl: "https://app.notion.com/a", startDate: "2026-09-10", endDate: "2026-09-11" },
+    { pageUrl: "https://app.notion.com/b", startDate: "2026-09-12", endDate: "2026-09-14" },
+  ]);
+  assert.match(n!, /already has entries covering/);
+  assert.match(n!, /\|Sep 10–11>, <[^>]+\|Sep 12–14>/);
 });

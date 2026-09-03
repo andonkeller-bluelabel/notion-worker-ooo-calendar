@@ -10,8 +10,8 @@
  */
 
 import { autoApproves, isApproved, blockedReason, eventSubject, type OooRequest } from "./oooRequest.js";
-import { ApprovalStatus } from "./schema.js";
-import { announcementFor, approvedDm, approverRequestDm } from "./announce.js";
+import { ApprovalStatus, CALENDAR_STATUSES } from "./schema.js";
+import { announcementFor, approvedDm, approverRequestDm, duplicateNotice, type OverlapRow } from "./announce.js";
 
 export interface ReconcileDeps {
   createEvent: (request: OooRequest) => Promise<{ id: string }>;
@@ -36,6 +36,11 @@ export interface ReconcileDeps {
   setNotifiedApprover: (pageId: string, approverId: string) => Promise<void>;
   /** The team's time-off process page, linked from the approver's DM. */
   processUrl: string;
+  /**
+   * Other rows for the same person covering some of the same days. Called only
+   * when a row enters a calendar status, so it costs nothing on a no-op.
+   */
+  findOverlaps: (request: OooRequest) => Promise<OverlapRow[]>;
   /** True when the error from updateEvent/deleteEvent means "no such event". */
   isNotFound: (err: unknown) => boolean;
   /** Best-effort operational notice. Never throws into the reconciler. */
@@ -146,6 +151,19 @@ async function announceIfChanged(request: OooRequest, deps: ReconcileDeps): Prom
       const sent = await deps.dm(personal.email, personal.text);
       if (!sent) console.warn(`[reconcile] couldn't DM ${personal.email} about ${request.pageId}`);
     }
+    // Two rows describing the same absence produce two calendar entries, and
+    // the worker is right to make both — it cannot know which is intended.
+    // Flag it for a human instead of guessing. Runs after the notice so the
+    // warning follows the thing it is warning about.
+    if (CALENDAR_STATUSES.includes(request.status ?? "")) {
+      try {
+        const notice = duplicateNotice(request, await deps.findOverlaps(request));
+        if (notice) await deps.announce(notice);
+      } catch (err) {
+        console.error(`[reconcile] overlap check failed for ${request.pageId}:`, err);
+      }
+    }
+
     await deps.setNotifiedStatus(request.pageId, announcement.status);
   } catch (err) {
     console.error(`[reconcile] couldn't announce ${request.pageId}:`, err);

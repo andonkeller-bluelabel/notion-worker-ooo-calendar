@@ -7,7 +7,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { addDays, allDayRange, blockedReason, calendarNameFor, eventSubject, isApproved, toDateOnly, toOooRequest } from "./oooRequest.js";
+import { addDays, allDayRange, blockedReason, calendarNameFor, eventSubject, isApproved, rangesOverlap, toDateOnly, toOooRequest } from "./oooRequest.js";
 import type { NotionPage } from "./notion.js";
 
 function page(props: Record<string, unknown>, over: Partial<NotionPage> = {}): NotionPage {
@@ -219,4 +219,21 @@ test("blockedReason catches the approve-before-filling-in-dates case", () => {
 test("blockedReason catches a reversed range", () => {
   const request = toOooRequest(page({ ...APPROVED_ROW, Dates: date("2026-09-11", "2026-09-07") }));
   assert.match(blockedReason(request) ?? "", /ends .* before it starts/);
+});
+
+// --- overlap detection ---
+
+test("rangesOverlap catches every way two absences can touch", () => {
+  const a = ["2026-09-10", "2026-09-14"] as const;
+  assert.ok(rangesOverlap(...a, "2026-09-14", "2026-09-20"), "touching at the last day");
+  assert.ok(rangesOverlap(...a, "2026-09-05", "2026-09-10"), "touching at the first day");
+  assert.ok(rangesOverlap(...a, "2026-09-11", "2026-09-12"), "fully inside");
+  assert.ok(rangesOverlap(...a, "2026-09-01", "2026-09-30"), "fully containing");
+  assert.ok(rangesOverlap(...a, ...a), "identical — the duplicate case");
+});
+
+test("rangesOverlap leaves adjacent absences alone", () => {
+  // Back-to-back time off is two real absences, not a duplicate.
+  assert.equal(rangesOverlap("2026-09-10", "2026-09-14", "2026-09-15", "2026-09-18"), false);
+  assert.equal(rangesOverlap("2026-09-10", "2026-09-14", "2026-09-05", "2026-09-09"), false);
 });

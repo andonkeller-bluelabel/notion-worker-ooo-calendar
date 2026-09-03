@@ -224,3 +224,32 @@ export function approvedDm(request: OooRequest): DirectMessage | null {
       ":calendar: Added to the `Out of Office` calendar in Outlook.",
   };
 }
+
+
+/** Another row that covers some of the same days for the same person. */
+export interface OverlapRow {
+  pageUrl: string;
+  startDate: string;
+  endDate: string;
+}
+
+/**
+ * A "these look like the same absence" notice, or null when there is nothing
+ * to say.
+ *
+ * Deliberately a warning rather than a refusal. Two overlapping rows are
+ * usually a duplicate, but not always — someone may split a longer absence, or
+ * take a half day inside a longer trip — so a human decides which to keep. The
+ * worker never silently discards a request.
+ */
+export function duplicateNotice(request: OooRequest, overlaps: OverlapRow[]): string | null {
+  if (overlaps.length === 0 || !request.startDate || !request.endDate) return null;
+  const others = overlaps
+    .map((o) => link(formatRange(o.startDate, o.endDate), o.pageUrl))
+    .join(", ");
+  const plural = overlaps.length > 1 ? "entries" : "another entry";
+  return (
+    `:warning: *${request.calendarName}* already has ${plural} covering these days: ${others}. ` +
+    `Both are on the calendar — remove whichever is wrong.`
+  );
+}

@@ -247,3 +247,15 @@ export function blockedReason(request: OooRequest): string | null {
 export function eventSubject(request: OooRequest): string {
   return `${AWAY_MARKER} ${request.calendarName}`;
 }
+
+/**
+ * Whether two inclusive date ranges share at least one day.
+ *
+ * Used to spot two rows describing the same absence. The backfill imported time
+ * off that was already on the legacy calendar, so anyone who re-submits an
+ * upcoming request produces a second row — and the worker, behaving correctly,
+ * gives it its own calendar entry.
+ */
+export function rangesOverlap(aStart: string, aEnd: string, bStart: string, bEnd: string): boolean {
+  return aStart <= bEnd && bStart <= aEnd;
+}
